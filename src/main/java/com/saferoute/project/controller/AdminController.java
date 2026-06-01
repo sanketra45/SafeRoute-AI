@@ -34,8 +34,21 @@ public class AdminController {
         stats.setTotalHazards(hazardRepository.count());
         stats.setActiveHazards(hazardRepository.countByStatus(ReportedHazard.HazardStatus.ACTIVE));
         stats.setTotalUsers(userRepository.count());
-        stats.setSeverityCounts(accidentRecordRepository.countBySeverityGrouped());
-        stats.setTopBlackspots(accidentRecordRepository.findTopBlackspots(10));
+
+        // Map raw Object[] rows → typed SeverityCount
+        stats.setSeverityCounts(
+                accidentRecordRepository.countBySeverityGrouped().stream()
+                        .map(AdminStatsDto.SeverityCount::new)
+                        .toList()
+        );
+
+        // Map raw Object[] rows → typed Blackspot
+        stats.setTopBlackspots(
+                accidentRecordRepository.findTopBlackspots(10).stream()
+                        .map(AdminStatsDto.Blackspot::new)
+                        .toList()
+        );
+
         return ResponseEntity.ok(stats);
     }
 

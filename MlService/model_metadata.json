@@ -1,0 +1,45 @@
+{
+  "accuracy": 0.8525,
+  "cv_accuracy_mean": 0.8415,
+  "cv_accuracy_std": 0.028,
+  "features": [
+    "latitude",
+    "longitude",
+    "time_of_day",
+    "weather_enc",
+    "road_enc",
+    "density_enc",
+    "accident_count",
+    "is_night",
+    "is_peak",
+    "is_bad_weather"
+  ],
+  "classes": [
+    "High",
+    "Low",
+    "Medium"
+  ],
+  "weather_classes": [
+    "Clear",
+    "Cloudy",
+    "Fog",
+    "Haze",
+    "Rain"
+  ],
+  "road_classes": [
+    "City Road",
+    "Flyover",
+    "Highway",
+    "Junction",
+    "Ring Road",
+    "Urban"
+  ],
+  "density_classes": [
+    "High",
+    "Low",
+    "Medium"
+  ],
+  "n_estimators": 100,
+  "max_depth": 10,
+  "dataset_size": 2000
+}

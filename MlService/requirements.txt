@@ -1,0 +1,9 @@
+flask==3.0.3
+flask-cors==4.0.1
+scikit-learn==1.4.2
+pandas==2.2.2
+numpy==1.26.4
+joblib==1.4.2
+osmnx==1.9.3
+networkx==3.3
+requests==2.32.3

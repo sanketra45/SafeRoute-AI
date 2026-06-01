@@ -47,7 +47,7 @@ public class ReportedHazard {
     private LocalDateTime reportedAt = LocalDateTime.now();
 
     public enum HazardType {
-        POTHOLE, ACCIDENT, ROAD_CLOSURE, WATERLOGGING, DEBRIS
+        POTHOLE, ACCIDENT, ROAD_CLOSURE, WATERLOGGING, FLOODING, CONSTRUCTION, DEBRIS, OTHER
     }
 
     public enum HazardStatus {

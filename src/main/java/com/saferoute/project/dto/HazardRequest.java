@@ -8,7 +8,7 @@ public class HazardRequest {
     @NotNull private Double latitude;
     @NotNull private Double longitude;
 
-    // POTHOLE | ACCIDENT | ROAD_CLOSURE | WATERLOGGING | DEBRIS
+    // POTHOLE | ACCIDENT | ROAD_CLOSURE | WATERLOGGING | FLOODING | CONSTRUCTION | DEBRIS | OTHER
     @NotNull private String hazardType;
 
     private String description;
