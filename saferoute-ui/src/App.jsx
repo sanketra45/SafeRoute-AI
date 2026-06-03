@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import MainLayout from './components/MainLayout'
@@ -8,33 +9,44 @@ import RiskAnalysisPage from './pages/RiskAnalysisPage'
 import LeaderboardPage from './pages/LeaderboardPage'
 import AdminPage from './pages/AdminPage'
 
-export default function App() {
+function AppInner() {
+  const { user, logout } = useAuth()
   const [page, setPage] = useState('login')
   const [activePage, setActivePage] = useState('map')
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  const handleLogin = () => { setIsLoggedIn(true); setPage('app') }
-  const handleRegister = () => { setIsLoggedIn(true); setPage('app') }
-  const handleLogout = () => { setIsLoggedIn(false); setPage('login') }
+  const handleLogin = () => { setPage('app'); setActivePage('map') }
+  const handleRegister = () => { setPage('app'); setActivePage('map') }
+  const handleLogout = () => { logout(); setPage('login') }
 
-  if (page === 'login') {
+  if (!user) {
+    if (page === 'register') {
+      return <RegisterPage onRegister={handleRegister} onLogin={() => setPage('login')} />
+    }
     return <LoginPage onLogin={handleLogin} onRegister={() => setPage('register')} />
   }
-  if (page === 'register') {
-    return <RegisterPage onRegister={handleRegister} onLogin={() => setPage('login')} />
-  }
+
+  // Role-based page guard
+  const safeActivePage = activePage === 'admin' && user.role !== 'admin' ? 'map' : activePage
 
   const pageMap = {
     map: <MapPage />,
     navigate: <NavigatePage />,
     risk: <RiskAnalysisPage />,
     leaderboard: <LeaderboardPage />,
-    admin: <AdminPage />,
+    admin: user.role === 'admin' ? <AdminPage /> : <MapPage />,
   }
 
   return (
-    <MainLayout activePage={activePage} setActivePage={setActivePage} onLogout={handleLogout}>
-      {pageMap[activePage] || <MapPage />}
+    <MainLayout activePage={safeActivePage} setActivePage={setActivePage} onLogout={handleLogout}>
+      {pageMap[safeActivePage] || <MapPage />}
     </MainLayout>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   )
 }

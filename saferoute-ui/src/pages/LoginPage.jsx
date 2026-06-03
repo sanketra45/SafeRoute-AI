@@ -1,26 +1,32 @@
 import { useState } from 'react'
-import { Shield, Mail, Lock, Eye, EyeOff, CreditCard, AlertTriangle, CheckCircle, Activity } from 'lucide-react'
-import { login as apiLogin } from '../services/api'
+import { Shield, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle, Activity } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 export default function LoginPage({ onLogin, onRegister }) {
+  const { login, error, clearError } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [localError, setLocalError] = useState(null)
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
+    setLocalError(null)
+    clearError()
+    if (!email.trim() || !password.trim()) { setLocalError('Please enter email and password.'); return }
     setLoading(true)
-    try {
-      await apiLogin(email, password)
-      onLogin()
-    } catch {
-      // Backend offline — allow demo login
-      setTimeout(() => onLogin(), 800)
-    } finally {
-      setLoading(false)
-    }
+    setTimeout(() => {
+      const ok = login(email.trim(), password)
+      if (ok) {
+        onLogin()
+      } else {
+        setLoading(false)
+      }
+    }, 600)
   }
+
+  const displayError = localError || error
 
   return (
     <div className="auth-layout">
@@ -89,6 +95,26 @@ export default function LoginPage({ onLogin, onRegister }) {
             <div className="auth-form-sub">Navigate Nagpur Safely with AI</div>
           </div>
 
+          {/* Demo hint */}
+          <div style={{
+            background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)',
+            borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 11, color: 'var(--text-secondary)',
+          }}>
+            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>Admin demo:</span>{' '}
+            admin@saferoute.in / Admin@123 &nbsp;|&nbsp;
+            <span style={{ color: 'var(--text-muted)' }}>Or register a new account below.</span>
+          </div>
+
+          {displayError && (
+            <div style={{
+              background: 'rgba(255,77,77,0.08)', border: '1px solid rgba(255,77,77,0.25)',
+              borderRadius: 8, padding: '10px 14px', marginBottom: 16,
+              fontSize: 12, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <AlertTriangle size={13} /> {displayError}
+            </div>
+          )}
+
           <form className="auth-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="input-group">
               <label className="input-label">Email Address</label>
@@ -99,7 +125,7 @@ export default function LoginPage({ onLogin, onRegister }) {
                   type="email"
                   placeholder="name@company.com"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
             </div>
@@ -107,7 +133,6 @@ export default function LoginPage({ onLogin, onRegister }) {
             <div className="input-group">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <label className="input-label">Password</label>
-                <a style={{ fontSize: 11, color: 'var(--accent)', cursor: 'pointer' }}>Forgot?</a>
               </div>
               <div className="input-icon-wrap" style={{ position: 'relative' }}>
                 <Lock size={14} className="input-icon" />
@@ -116,7 +141,7 @@ export default function LoginPage({ onLogin, onRegister }) {
                   type={showPass ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   style={{ paddingRight: 40 }}
                 />
                 <button
@@ -138,24 +163,9 @@ export default function LoginPage({ onLogin, onRegister }) {
               {loading ? (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Activity size={14} style={{ animation: 'pulse 1s infinite' }} />
-                  Authenticating...
+                  Signing In...
                 </span>
               ) : 'Sign In →'}
-            </button>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--border)' }} />
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>or</span>
-              <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--border)' }} />
-            </div>
-
-            <button
-              type="button"
-              className="btn btn-outline"
-              style={{ width: '100%', justifyContent: 'center', padding: '12px', borderRadius: 10 }}
-            >
-              <CreditCard size={14} />
-              Continue with Fleet ID
             </button>
 
             <div className="auth-form-footer">

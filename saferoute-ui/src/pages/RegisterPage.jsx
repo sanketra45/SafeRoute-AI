@@ -1,28 +1,40 @@
 import { useState } from 'react'
-import { Shield, User, Mail, Lock, RefreshCw, Zap, Route, Activity } from 'lucide-react'
-import { register as apiRegister } from '../services/api'
+import { Shield, User, Mail, Lock, RefreshCw, Zap, Route, Activity, AlertTriangle } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 export default function RegisterPage({ onRegister, onLogin }) {
+  const { register, error, clearError } = useAuth()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [localError, setLocalError] = useState(null)
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
+    setLocalError(null)
+    clearError()
+
+    if (!name.trim()) { setLocalError('Please enter your full name.'); return }
+    if (!email.trim()) { setLocalError('Please enter your email address.'); return }
+    if (password.length < 6) { setLocalError('Password must be at least 6 characters.'); return }
+    if (password !== confirm) { setLocalError('Passwords do not match.'); return }
+    if (!agreed) { setLocalError('Please agree to the Terms of Service.'); return }
+
     setLoading(true)
-    try {
-      await apiRegister({ name, email, password })
-      onRegister()
-    } catch {
-      // Backend offline — allow demo register
-      setTimeout(() => onRegister(), 800)
-    } finally {
-      setLoading(false)
-    }
+    setTimeout(() => {
+      const ok = register(name.trim(), email.trim(), password)
+      if (ok) {
+        onRegister()
+      } else {
+        setLoading(false)
+      }
+    }, 700)
   }
+
+  const displayError = localError || error
 
   return (
     <div className="auth-layout">
@@ -31,14 +43,12 @@ export default function RegisterPage({ onRegister, onLogin }) {
         <div className="auth-left-bg" />
         <div className="auth-left-gradient" />
 
-        {/* City skyline hint */}
+        {/* City silhouette */}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0, height: 220,
           background: 'linear-gradient(to top, rgba(0,5,5,1) 20%, transparent)',
-          zIndex: 1
+          zIndex: 1,
         }} />
-
-        {/* Fake city silhouette */}
         <svg style={{ position: 'absolute', bottom: 100, left: 0, right: 0, opacity: 0.15, zIndex: 1 }}
           viewBox="0 0 600 200" xmlns="http://www.w3.org/2000/svg">
           <rect x="20" y="80" width="40" height="120" fill="var(--accent)" />
@@ -101,12 +111,22 @@ export default function RegisterPage({ onRegister, onLogin }) {
             <div className="auth-form-sub">Create your Nagpur driver profile to access real-time risk intelligence.</div>
           </div>
 
+          {displayError && (
+            <div style={{
+              background: 'rgba(255,77,77,0.08)', border: '1px solid rgba(255,77,77,0.25)',
+              borderRadius: 8, padding: '10px 14px', marginBottom: 16,
+              fontSize: 12, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <AlertTriangle size={13} /> {displayError}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="input-group">
               <label className="input-label">Full Name</label>
               <div className="input-icon-wrap">
                 <User size={14} className="input-icon" />
-                <input className="input" type="text" placeholder="Enter your full name" value={name} onChange={e => setName(e.target.value)} />
+                <input className="input" type="text" placeholder="Enter your full name" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
             </div>
 
@@ -114,7 +134,7 @@ export default function RegisterPage({ onRegister, onLogin }) {
               <label className="input-label">Email Address</label>
               <div className="input-icon-wrap">
                 <Mail size={14} className="input-icon" />
-                <input className="input" type="email" placeholder="driver@nagpur-safe.in" value={email} onChange={e => setEmail(e.target.value)} />
+                <input className="input" type="email" placeholder="driver@nagpur-safe.in" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
             </div>
 
@@ -123,23 +143,23 @@ export default function RegisterPage({ onRegister, onLogin }) {
                 <label className="input-label">Password</label>
                 <div className="input-icon-wrap">
                   <Lock size={14} className="input-icon" />
-                  <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
+                  <input className="input" type="password" placeholder="Min. 6 chars" value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
               </div>
               <div className="input-group">
                 <label className="input-label">Confirm</label>
                 <div className="input-icon-wrap">
                   <RefreshCw size={14} className="input-icon" />
-                  <input className="input" type="password" placeholder="••••••••" value={confirm} onChange={e => setConfirm(e.target.value)} />
+                  <input className="input" type="password" placeholder="••••••••" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
                 </div>
               </div>
             </div>
 
             <label className="checkbox-row">
-              <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
               <span>
-                I agree to the <a>Terms of Service</a> and{' '}
-                <a>Hazard Database Participation</a> policies.
+                I agree to the <a href="#" onClick={(e) => e.preventDefault()}>Terms of Service</a> and{' '}
+                <a href="#" onClick={(e) => e.preventDefault()}>Hazard Database Participation</a> policies.
               </span>
             </label>
 
@@ -151,8 +171,7 @@ export default function RegisterPage({ onRegister, onLogin }) {
             >
               {loading ? (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Activity size={14} />
-                  Creating Account...
+                  <Activity size={14} /> Creating Account...
                 </span>
               ) : 'Create Account →'}
             </button>
