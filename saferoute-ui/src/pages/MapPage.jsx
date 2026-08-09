@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { AlertTriangle, CheckCircle, Filter, Locate, Layers, MapPin, Plus, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Filter, Locate, Layers, MapPin, Plus, RefreshCw } from 'lucide-react'
 import ReportHazardModal from '../components/ReportHazardModal'
+import { getHotspots } from '../services/api'
 
-// Fix Leaflet default icon paths (needed with Vite)
+// Fix Leaflet default icon paths
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -30,23 +31,6 @@ const createHazardIcon = () => L.divIcon({
   iconSize: [22, 22],
   iconAnchor: [11, 11],
 })
-
-const BASE_HOTSPOTS = [
-  { id: 1, lat: 21.1458, lng: 79.0882, type: 'red', label: 'Sitabuldi Interchange', risk: 'CRITICAL', detail: '12 incidents/month' },
-  { id: 2, lat: 21.1320, lng: 79.1070, type: 'red', label: 'Wardha Road Signal', risk: 'CRITICAL', detail: '8 incidents/month' },
-  { id: 3, lat: 21.1520, lng: 79.0650, type: 'orange', label: 'Dharampeth Square', risk: 'HIGH', detail: '5 incidents/month' },
-  { id: 4, lat: 21.1640, lng: 79.1120, type: 'orange', label: 'Manish Nagar Flyover', risk: 'HIGH', detail: '3 incidents/month' },
-  { id: 5, lat: 21.1150, lng: 79.0720, type: 'green', label: 'Hingna Road', risk: 'LOW', detail: '1 incident/month' },
-  { id: 6, lat: 21.1580, lng: 79.0510, type: 'green', label: 'Civil Lines Bypass', risk: 'LOW', detail: '0 incidents' },
-  { id: 7, lat: 21.1250, lng: 79.1350, type: 'orange', label: 'Besa Road', risk: 'MEDIUM', detail: '2 incidents/month' },
-]
-
-const ROAD_INCIDENTS = [
-  { time: '2 min ago', location: 'Sitabuldi Interchange', type: 'Accident', severity: 'critical' },
-  { time: '8 min ago', location: 'Wardha Road', type: 'Congestion', severity: 'high' },
-  { time: '15 min ago', location: 'Dharampeth', type: 'Road Work', severity: 'medium' },
-  { time: '22 min ago', location: 'Manish Nagar', type: 'Breakdown', severity: 'low' },
-]
 
 function UserLocationButton() {
   const map = useMap()
@@ -81,13 +65,23 @@ export default function MapPage() {
   const [filter, setFilter] = useState('all')
   const [showHazardModal, setShowHazardModal] = useState(false)
   const [userHazards, setUserHazards] = useState(getStoredHazards)
+  const [apiHotspots, setApiHotspots] = useState([])
   const [mapLayer, setMapLayer] = useState('risk')
   const [showFilterPanel, setShowFilterPanel] = useState(false)
 
-  const refreshHazards = useCallback(() => setUserHazards(getStoredHazards()), [])
+  const refreshHazards = useCallback(() => {
+    setUserHazards(getStoredHazards())
+    getHotspots()
+      .then((data) => setApiHotspots(Array.isArray(data) ? data : []))
+      .catch(() => setApiHotspots([]))
+  }, [])
+
+  useEffect(() => {
+    refreshHazards()
+  }, [refreshHazards])
 
   const allHotspots = [
-    ...BASE_HOTSPOTS.filter((h) => {
+    ...apiHotspots.filter((h) => {
       if (filter === 'all') return true
       if (filter === 'critical') return h.risk === 'CRITICAL'
       if (filter === 'high') return h.risk === 'HIGH'
@@ -99,8 +93,8 @@ export default function MapPage() {
 
   const getIcon = (h) => {
     if (h.userReported) return createHazardIcon()
-    const colors = { red: '#ff4d4d', orange: '#ff9500', green: '#00e5a0' }
-    return createColoredIcon(colors[h.type] || '#4db8ff')
+    const colors = { red: '#ff4d4d', orange: '#ff9500', green: '#00e5a0', CRITICAL: '#ff4d4d', HIGH: '#ff9500', LOW: '#00e5a0' }
+    return createColoredIcon(colors[h.type] || colors[h.risk] || '#4db8ff')
   }
 
   return (
@@ -111,22 +105,6 @@ export default function MapPage() {
           100% { transform: scale(2.5); opacity: 0; }
         }
       `}</style>
-
-      {/* Alert Bar */}
-      <div className="alert-banner" style={{ marginBottom: 16 }}>
-        <AlertTriangle size={14} color="var(--red)" />
-        <span style={{ color: 'var(--red)', fontWeight: 600 }}>LIVE ALERT:</span>
-        <span style={{ color: 'var(--text-secondary)' }}>
-          High-risk incident detected at Sitabuldi Interchange — 2 min ago. Consider alternate route.
-        </span>
-        <button
-          className="btn-ghost"
-          style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 8px' }}
-          onClick={() => document.querySelector('[data-page="navigate"]')?.click()}
-        >
-          Reroute
-        </button>
-      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }} className="map-grid">
         {/* MAP */}
@@ -207,8 +185,8 @@ export default function MapPage() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
-              {allHotspots.map((h) => (
-                <Marker key={h.id} position={[h.lat, h.lng]} icon={getIcon(h)}>
+              {allHotspots.map((h, i) => (
+                <Marker key={h.id || i} position={[h.lat || h.latitude, h.lng || h.longitude]} icon={getIcon(h)}>
                   <Popup>
                     <div style={{ fontFamily: 'Inter, sans-serif', minWidth: 160 }}>
                       <div style={{
@@ -216,11 +194,11 @@ export default function MapPage() {
                         color: h.risk === 'CRITICAL' ? '#ff4d4d' : h.risk === 'HIGH' ? '#ff9500' : h.userReported ? '#ffd60a' : '#00e5a0',
                         marginBottom: 4,
                       }}>
-                        {h.userReported ? '⚠ USER REPORTED' : h.risk}
+                        {h.userReported ? '⚠ USER REPORTED' : h.risk || 'HAZARD'}
                       </div>
-                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{h.label}</div>
-                      <div style={{ fontSize: 12, color: '#666' }}>{h.detail || h.description}</div>
-                      {h.userReported && (
+                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{h.label || h.location || h.description || 'Reported Location'}</div>
+                      <div style={{ fontSize: 12, color: '#666' }}>{h.detail || h.description || 'Live safety record'}</div>
+                      {h.userReported && h.reportedAt && (
                         <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
                           {new Date(h.reportedAt).toLocaleString()}
                         </div>
@@ -277,13 +255,13 @@ export default function MapPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Stats */}
           <div className="card card-sm">
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, letterSpacing: 1, textTransform: 'uppercase' }}>Live Statistics</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, letterSpacing: 1, textTransform: 'uppercase' }}>Live Telemetry</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
                 { label: 'Active Alerts', value: String(allHotspots.filter(h => h.risk === 'CRITICAL').length), color: 'var(--red)' },
                 { label: 'Safe Zones', value: String(allHotspots.filter(h => h.risk === 'LOW').length), color: 'var(--accent)' },
                 { label: 'User Reports', value: String(userHazards.length), color: 'var(--yellow)' },
-                { label: 'Live Vehicles', value: '1.2K', color: 'var(--blue)' },
+                { label: 'Database Records', value: String(apiHotspots.length), color: 'var(--blue)' },
               ].map((s) => (
                 <div key={s.label} style={{ background: 'var(--bg-base)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>{s.label}</div>
@@ -293,43 +271,34 @@ export default function MapPage() {
             </div>
           </div>
 
-          {/* Recent Incidents */}
+          {/* User Hazards List */}
           <div className="card card-sm" style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, letterSpacing: 1, textTransform: 'uppercase' }}>Recent Incidents</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, letterSpacing: 1, textTransform: 'uppercase' }}>User Reported Hazards</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {ROAD_INCIDENTS.map((inc, i) => (
-                <div key={i} style={{
-                  display: 'flex', gap: 10, padding: '8px',
-                  background: 'var(--bg-base)', borderRadius: 8,
-                  border: '1px solid var(--border)', cursor: 'pointer',
-                  transition: 'border-color 0.2s',
-                }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%', marginTop: 5, flexShrink: 0,
-                    background: inc.severity === 'critical' ? 'var(--red)' : inc.severity === 'high' ? 'var(--orange)' : inc.severity === 'medium' ? 'var(--yellow)' : 'var(--accent)'
-                  }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>{inc.type}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{inc.location}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{inc.time}</div>
-                  </div>
+              {userHazards.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center' }}>
+                  No active hazard reports submitted. Click "Report Hazard" to submit one.
                 </div>
-              ))}
+              ) : (
+                userHazards.map((inc, i) => (
+                  <div key={i} style={{
+                    display: 'flex', gap: 10, padding: '8px',
+                    background: 'var(--bg-base)', borderRadius: 8,
+                    border: '1px solid var(--border)',
+                  }}>
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%', marginTop: 5, flexShrink: 0,
+                      background: 'var(--yellow)'
+                    }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{inc.type || 'Hazard'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{inc.description || inc.label}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{inc.reportedAt ? new Date(inc.reportedAt).toLocaleTimeString() : 'Just now'}</div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          </div>
-
-          {/* Active Route */}
-          <div className="card card-sm" style={{ background: 'rgba(0,229,160,0.05)', borderColor: 'rgba(0,229,160,0.2)' }}>
-            <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 8, letterSpacing: 1, textTransform: 'uppercase' }}>Active Route</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Civil Lines → Airport</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10 }}>Via Wardha Road Bypass • 18 min</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 2 }}>
-                <div style={{ width: '35%', height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
-              </div>
-              <span style={{ fontSize: 11, color: 'var(--accent)' }}>35%</span>
-            </div>
-            <span className="badge badge-low">Safe Route Active</span>
           </div>
         </div>
       </div>
@@ -338,8 +307,8 @@ export default function MapPage() {
       <div style={{ marginTop: 20 }}>
         <div className="section-header">
           <div>
-            <div className="section-title">Nagpur Hotspot Grid</div>
-            <div className="section-sub">{allHotspots.length} monitored locations • Updated live</div>
+            <div className="section-title">Database Hotspot Grid</div>
+            <div className="section-sub">{allHotspots.length} active records loaded from system</div>
           </div>
           <button
             className="btn btn-outline"
@@ -349,28 +318,39 @@ export default function MapPage() {
             <Filter size={12} /> Filter
           </button>
         </div>
-        <div className="grid-4 hotspot-grid">
-          {allHotspots.map((h) => (
-            <div key={h.id} className="card card-sm" style={{ cursor: 'pointer', transition: 'all 0.2s' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <MapPin size={14} color={
-                  h.userReported ? 'var(--yellow)' :
-                  h.type === 'red' ? 'var(--red)' :
-                  h.type === 'orange' ? 'var(--orange)' : 'var(--accent)'
-                } />
-                <span className={`badge badge-${
-                  h.risk === 'CRITICAL' ? 'critical' :
-                  h.risk === 'HIGH' ? 'high' :
-                  h.risk === 'MEDIUM' ? 'medium' : 'low'
-                }`}>
-                  {h.userReported ? '⚠ Reported' : h.risk}
-                </span>
-              </div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{h.label}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.detail || h.description}</div>
+
+        {allHotspots.length === 0 ? (
+          <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+            <AlertTriangle size={32} color="var(--text-muted)" style={{ marginBottom: 8, opacity: 0.5 }} />
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>No Blackspots or Hazards Found</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+              The database does not contain active blackspots. Use "Report Hazard" to submit real-time hazards.
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="grid-4 hotspot-grid">
+            {allHotspots.map((h, idx) => (
+              <div key={h.id || idx} className="card card-sm" style={{ cursor: 'pointer', transition: 'all 0.2s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <MapPin size={14} color={
+                    h.userReported ? 'var(--yellow)' :
+                    h.type === 'red' || h.risk === 'CRITICAL' ? 'var(--red)' :
+                    h.type === 'orange' || h.risk === 'HIGH' ? 'var(--orange)' : 'var(--accent)'
+                  } />
+                  <span className={`badge badge-${
+                    h.risk === 'CRITICAL' ? 'critical' :
+                    h.risk === 'HIGH' ? 'high' :
+                    h.risk === 'MEDIUM' ? 'medium' : 'low'
+                  }`}>
+                    {h.userReported ? '⚠ Reported' : h.risk || 'ACTIVE'}
+                  </span>
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{h.label || h.location || 'Location Marker'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.detail || h.description || 'Geo-coordinate hazard'}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Hazard Modal */}
