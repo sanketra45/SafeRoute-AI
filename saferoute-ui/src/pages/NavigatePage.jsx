@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
   Navigation, MapPin, Clock, Shield, AlertTriangle,
-  ChevronRight, CheckCircle, RefreshCw, Loader, Locate
+  CheckCircle, RefreshCw, Loader, Locate
 } from 'lucide-react'
 import { useProximityAlerts } from '../hooks/useProximityAlerts'
 import ProximityAlertBanner from '../components/ProximityAlertBanner'
+import { getHotspots } from '../services/api'
 
 // Fix Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl
@@ -31,43 +32,9 @@ const createUserIcon = () => L.divIcon({
   iconAnchor: [8, 8],
 })
 
-const NAGPUR_HOTSPOTS = [
-  { id: 1, lat: 21.1458, lng: 79.0882, type: 'red', label: 'Sitabuldi Interchange', risk: 'CRITICAL', detail: '12 incidents/month' },
-  { id: 2, lat: 21.1320, lng: 79.1070, type: 'red', label: 'Wardha Road Signal', risk: 'CRITICAL', detail: '8 incidents/month' },
-  { id: 3, lat: 21.1520, lng: 79.0650, type: 'orange', label: 'Dharampeth Square', risk: 'HIGH', detail: '5 incidents/month' },
-  { id: 4, lat: 21.1640, lng: 79.1120, type: 'orange', label: 'Manish Nagar Flyover', risk: 'HIGH', detail: '3 incidents/month' },
-  { id: 5, lat: 21.1150, lng: 79.0720, type: 'green', label: 'Hingna Road', risk: 'LOW', detail: '1 incident/month' },
-  { id: 6, lat: 21.1580, lng: 79.0510, type: 'green', label: 'Civil Lines Bypass', risk: 'LOW', detail: '0 incidents' },
-  { id: 7, lat: 21.1250, lng: 79.1350, type: 'orange', label: 'Besa Road', risk: 'MEDIUM', detail: '2 incidents/month' },
-]
-
 function getStoredHazards() {
   try { return JSON.parse(localStorage.getItem('saferoute_hazards') || '[]') } catch { return [] }
 }
-
-const DEMO_ROUTES = [
-  {
-    id: 1, name: 'Safest Route', via: 'Civil Lines → Wardha Road Bypass → Airport',
-    time: '22 min', distance: '14.2 km', riskScore: 92, incidents: 0, type: 'safe', recommended: true,
-    turns: ['Head North on Civil Lines Rd', 'Turn right on Wardha Road', 'Take Bypass at KP signal', 'Merge onto Airport Road'],
-    color: '#00e5a0',
-    coords: [[21.1580, 79.0510], [21.1458, 79.0700], [21.1380, 79.0900], [21.1310, 79.1020], [21.1250, 79.1200]],
-  },
-  {
-    id: 2, name: 'Fastest Route', via: 'Sitabuldi → Zero Mile → Airport',
-    time: '14 min', distance: '11.8 km', riskScore: 55, incidents: 3, type: 'fast', recommended: false,
-    turns: ['Head South on Sitabuldi Rd', 'Pass Zero Mile', 'Enter high-risk zone', 'Airport terminal'],
-    color: '#ff4d4d',
-    coords: [[21.1580, 79.0510], [21.1458, 79.0882], [21.1350, 79.1000], [21.1250, 79.1200]],
-  },
-  {
-    id: 3, name: 'Balanced Route', via: 'Dharampeth → Manish Nagar → Airport',
-    time: '18 min', distance: '12.9 km', riskScore: 74, incidents: 1, type: 'balanced', recommended: false,
-    turns: ['Head West on Dharampeth Rd', 'Turn at Manish Nagar', 'Merge at Ring Road', 'Airport exit'],
-    color: '#ff9500',
-    coords: [[21.1580, 79.0510], [21.1520, 79.0650], [21.1640, 79.1120], [21.1480, 79.1250], [21.1250, 79.1200]],
-  },
-]
 
 // Geocode using Nominatim
 async function geocodeAddress(query) {
@@ -82,14 +49,15 @@ async function geocodeAddress(query) {
 
 // Get route from OSRM (free routing API)
 async function getOSRMRoute(fromLat, fromLng, toLat, toLng) {
-  const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`
+  const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&steps=true`
   const res = await fetch(url)
   const data = await res.json()
   if (!data.routes?.length) throw new Error('No route found')
   const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng])
   const duration = Math.round(data.routes[0].duration / 60)
   const distance = (data.routes[0].distance / 1000).toFixed(1)
-  return { coords, duration, distance }
+  const steps = data.routes[0].legs?.[0]?.steps?.map(s => s.maneuver?.instruction || s.name).filter(Boolean) || []
+  return { coords, duration, distance, steps }
 }
 
 function MapController({ center, zoom }) {
@@ -103,7 +71,6 @@ function MapController({ center, zoom }) {
 export default function NavigatePage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [selectedRoute, setSelectedRoute] = useState(1)
   const [navigating, setNavigating] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -114,11 +81,17 @@ export default function NavigatePage() {
   const [mapCenter, setMapCenter] = useState([21.1458, 79.0882])
   const [locating, setLocating] = useState(false)
   const [routeInfo, setRouteInfo] = useState(null)
+  const [hotspots, setHotspots] = useState([])
   const watchRef = useRef(null)
-  const allHazards = [...NAGPUR_HOTSPOTS, ...getStoredHazards()]
-  const nearbyHazards = useProximityAlerts(userPos, allHazards, 500)
 
-  const active = DEMO_ROUTES.find((r) => r.id === selectedRoute)
+  useEffect(() => {
+    getHotspots()
+      .then(data => setHotspots(Array.isArray(data) ? data : []))
+      .catch(() => setHotspots([]))
+  }, [])
+
+  const allHazards = [...hotspots, ...getStoredHazards()]
+  const nearbyHazards = useProximityAlerts(userPos, allHazards, 500)
 
   const handleGetCurrentLocation = () => {
     setLocating(true)
@@ -138,6 +111,7 @@ export default function NavigatePage() {
     setLoading(true)
     setError(null)
     setRouteCoords(null)
+    setRouteInfo(null)
     try {
       const [fromResult, toResult] = await Promise.all([
         geocodeAddress(from),
@@ -149,11 +123,9 @@ export default function NavigatePage() {
 
       const osrm = await getOSRMRoute(fromResult.lat, fromResult.lng, toResult.lat, toResult.lng)
       setRouteCoords(osrm.coords)
-      setRouteInfo({ duration: osrm.duration, distance: osrm.distance })
+      setRouteInfo({ duration: osrm.duration, distance: osrm.distance, steps: osrm.steps })
     } catch (err) {
-      setError(err.message || 'Could not find route. Showing demo routes.')
-      // Fall back to demo route coords
-      setRouteCoords(active.coords)
+      setError(err.message || 'Could not find route.')
     } finally {
       setLoading(false)
     }
@@ -168,8 +140,7 @@ export default function NavigatePage() {
         setMapCenter([pos.coords.latitude, pos.coords.longitude])
       },
       () => {
-        // Fallback: simulate movement near Nagpur for demo
-        setUserPos({ lat: 21.1458 + (Math.random() - 0.5) * 0.01, lon: 79.0882 + (Math.random() - 0.5) * 0.01 })
+        setUserPos({ lat: 21.1458, lon: 79.0882 })
       },
       { enableHighAccuracy: true, maximumAge: 3000 }
     )
@@ -181,9 +152,6 @@ export default function NavigatePage() {
     watchRef.current = null
     setUserPos(null)
   }
-
-  const displayCoords = routeCoords || (selectedRoute ? active?.coords : null)
-  const displayColor = routeCoords ? '#00e5a0' : active?.color
 
   return (
     <div className="page">
@@ -200,16 +168,16 @@ export default function NavigatePage() {
       <div className="section-header" style={{ marginBottom: 20 }}>
         <div>
           <div className="section-title">Route Navigator</div>
-          <div className="section-sub">AI-powered safe path planning for Nagpur</div>
+          <div className="section-sub">Real-time path planning for Nagpur</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div className="pulse-dot" />
-          <span style={{ fontSize: 11, color: 'var(--accent)' }}>Live traffic data</span>
+          <span style={{ fontSize: 11, color: 'var(--accent)' }}>Live GPS Router</span>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 20 }} className="nav-grid">
-        {/* LEFT: Input + Route Cards */}
+        {/* LEFT: Input + Route Card */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Route Input */}
           <div className="card">
@@ -275,74 +243,47 @@ export default function NavigatePage() {
                 disabled={loading}
               >
                 {loading
-                  ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Finding Routes...</>
-                  : <><Navigation size={14} /> Find Safe Routes</>
+                  ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Finding Route...</>
+                  : <><Navigation size={14} /> Find Safe Route</>
                 }
               </button>
 
               {error && (
                 <div style={{ fontSize: 11, color: 'var(--orange)', padding: '4px 0' }}>⚠ {error}</div>
               )}
-              {routeInfo && (
-                <div style={{ fontSize: 11, color: 'var(--accent)', padding: '4px 0' }}>
-                  ✓ Route found! {routeInfo.distance}km • ~{routeInfo.duration} min
-                </div>
-              )}
             </div>
           </div>
 
-          {/* Route Options */}
-          {DEMO_ROUTES.map((route) => (
-            <div
-              key={route.id}
-              className="card"
-              style={{
-                cursor: 'pointer',
-                border: selectedRoute === route.id ? `1px solid ${route.color}` : '1px solid var(--border)',
-                background: selectedRoute === route.id ? `${route.color}0a` : 'var(--bg-card)',
-                transition: 'all 0.2s',
-              }}
-              onClick={() => setSelectedRoute(route.id)}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700 }}>{route.name}</span>
-                    {route.recommended && <span className="badge badge-low" style={{ fontSize: 9 }}>RECOMMENDED</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{route.via}</div>
-                </div>
-                {selectedRoute === route.id && <CheckCircle size={16} color={route.color} />}
+          {/* Calculated Route Info Card */}
+          {routeInfo ? (
+            <div className="card" style={{ border: '1px solid var(--accent)', background: 'rgba(0,229,160,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span className="badge badge-low">Calculated Route</span>
+                <CheckCircle size={16} color="var(--accent)" />
               </div>
 
-              <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
-                  <Clock size={12} /> {route.time}
+              <div style={{ display: 'flex', gap: 16, margin: '12px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  <Clock size={14} color="var(--accent)" /> ~{routeInfo.duration} min
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
-                  <MapPin size={12} /> {route.distance}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  <MapPin size={14} color="var(--accent)" /> {routeInfo.distance} km
                 </div>
-                {route.incidents > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--orange)' }}>
-                    <AlertTriangle size={12} /> {route.incidents} incident{route.incidents > 1 ? 's' : ''}
-                  </div>
-                )}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 2 }}>
-                  <div style={{
-                    width: `${route.riskScore}%`, height: '100%', borderRadius: 2,
-                    background: route.color,
-                  }} />
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: route.color, minWidth: 32, textAlign: 'right' }}>
-                  {route.riskScore}
-                </span>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Safety</span>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Live route mapped via OpenStreetMap and OSRM telemetry.
               </div>
             </div>
-          ))}
+          ) : (
+            <div className="card" style={{ padding: 24, textAlign: 'center' }}>
+              <Navigation size={28} color="var(--text-muted)" style={{ marginBottom: 8, opacity: 0.5 }} />
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>No Active Route</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                Enter your starting location and destination above to compute a route.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* RIGHT: Map + Turn-by-turn */}
@@ -361,13 +302,12 @@ export default function NavigatePage() {
               />
 
               {/* Route polyline */}
-              {displayCoords && (
+              {routeCoords && (
                 <Polyline
-                  positions={displayCoords}
-                  color={displayColor}
+                  positions={routeCoords}
+                  color="#00e5a0"
                   weight={5}
                   opacity={0.85}
-                  dashArray={routeCoords ? null : '12 6'}
                 />
               )}
 
@@ -401,55 +341,53 @@ export default function NavigatePage() {
               )}
 
               {/* Hotspot markers on nav map */}
-              {NAGPUR_HOTSPOTS.filter(h => h.risk === 'CRITICAL').map(h => (
-                <Marker key={h.id} position={[h.lat, h.lng]} icon={createPinIcon('#ff4d4d')}>
-                  <Popup><b style={{ color: '#ff4d4d' }}>{h.risk}</b><br />{h.label}<br />{h.detail}</Popup>
+              {hotspots.filter(h => h.risk === 'CRITICAL' || h.risk === 'HIGH').map((h, i) => (
+                <Marker key={h.id || i} position={[h.lat || h.latitude, h.lng || h.longitude]} icon={createPinIcon('#ff4d4d')}>
+                  <Popup><b style={{ color: '#ff4d4d' }}>{h.risk || 'HAZARD'}</b><br />{h.label || h.location}<br />{h.detail || h.description}</Popup>
                 </Marker>
               ))}
 
               <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 800, background: 'rgba(8,12,14,0.9)', borderRadius: 8, padding: '6px 12px', fontSize: 11, color: '#aaa', pointerEvents: 'none' }}>
-                {active?.name} Preview
+                {routeInfo ? 'Route Active' : 'Map View'}
               </div>
             </MapContainer>
           </div>
 
-          {/* Turn by Turn */}
-          <div className="card">
-            <div className="section-header" style={{ marginBottom: 14 }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700 }}>Turn-by-Turn</div>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{active?.time} • {active?.distance}</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {active?.turns.map((turn, i) => (
-                <div key={i} style={{
-                  display: 'flex', gap: 14, padding: '12px 0',
-                  borderBottom: i < active.turns.length - 1 ? '1px solid rgba(30,45,50,0.5)' : 'none',
-                  alignItems: 'flex-start',
-                }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: '50%',
-                    background: 'var(--bg-base)', border: '1px solid var(--border)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', flexShrink: 0,
+          {/* Turn by Turn Directions */}
+          {routeInfo?.steps && routeInfo.steps.length > 0 && (
+            <div className="card">
+              <div className="section-header" style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700 }}>Directions</div>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{routeInfo.duration} min • {routeInfo.distance} km</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, maxHeight: 200, overflowY: 'auto' }}>
+                {routeInfo.steps.map((step, i) => (
+                  <div key={i} style={{
+                    display: 'flex', gap: 14, padding: '10px 0',
+                    borderBottom: i < routeInfo.steps.length - 1 ? '1px solid rgba(30,45,50,0.5)' : 'none',
+                    alignItems: 'center',
                   }}>
-                    {i + 1}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{turn}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                      {(i === 0 || i === active.turns.length - 1) ? '— waypoint' : `~${(i + 1) * 3} min`}
+                    <div style={{
+                      width: 24, height: 24, borderRadius: '50%',
+                      background: 'var(--bg-base)', border: '1px solid var(--border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 11, fontWeight: 700, color: 'var(--accent)', flexShrink: 0,
+                    }}>
+                      {i + 1}
                     </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>{step}</div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Start Navigation */}
           <button
             className={`btn ${navigating ? 'btn-danger' : 'btn-primary'}`}
             style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15, borderRadius: 10 }}
             onClick={navigating ? stopNavigation : startNavigation}
+            disabled={!routeCoords && !userPos}
           >
             {navigating
               ? <><Shield size={16} /> Stop Navigation</>
