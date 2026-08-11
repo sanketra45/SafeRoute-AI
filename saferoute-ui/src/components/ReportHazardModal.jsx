@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, AlertTriangle, MapPin, Loader } from 'lucide-react'
+import { reportHazard } from '../services/api'
 
 const HAZARD_TYPES = [
   { value: 'pothole', label: '🕳 Pothole' },
@@ -18,13 +19,6 @@ const SEVERITY_LEVELS = [
   { value: 'CRITICAL', label: 'Critical', color: 'var(--red)' },
 ]
 
-function getHazards() {
-  try { return JSON.parse(localStorage.getItem('saferoute_hazards') || '[]') } catch { return [] }
-}
-function saveHazards(hazards) {
-  localStorage.setItem('saferoute_hazards', JSON.stringify(hazards))
-}
-
 export default function ReportHazardModal({ onClose, onSubmit, defaultLat, defaultLng }) {
   const [type, setType] = useState('pothole')
   const [severity, setSeverity] = useState('MEDIUM')
@@ -35,6 +29,7 @@ export default function ReportHazardModal({ onClose, onSubmit, defaultLat, defau
     defaultLat && defaultLng ? { lat: defaultLat, lng: defaultLng } : null
   )
   const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
 
   const getGPS = () => {
     setGettingLocation(true)
@@ -51,30 +46,21 @@ export default function ReportHazardModal({ onClose, onSubmit, defaultLat, defau
     )
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    const hazardType = HAZARD_TYPES.find((h) => h.value === type)
-    const newHazard = {
-      id: `hazard-${Date.now()}`,
-      type,
-      label: hazardType?.label || type,
-      severity,
-      risk: severity,
-      location,
-      description,
-      lat: coords?.lat || 21.1458 + (Math.random() - 0.5) * 0.05,
-      lng: coords?.lng || 79.0882 + (Math.random() - 0.5) * 0.05,
-      reportedAt: new Date().toISOString(),
-      userReported: true,
-      detail: description || hazardType?.label,
+    setSubmitError(null)
+    try {
+      const reported = await reportHazard({
+        latitude: coords?.lat || 21.1458,
+        longitude: coords?.lng || 79.0882,
+        hazardType: ({ pothole: 'POTHOLE', flood: 'FLOODING', accident: 'ACCIDENT', roadblock: 'ROAD_CLOSURE', debris: 'DEBRIS', signal: 'OTHER', other: 'OTHER' })[type],
+        description: description || location || undefined,
+      })
+      setSubmitted(true)
+      setTimeout(() => { onSubmit?.(reported); onClose?.() }, 1000)
+    } catch (error) {
+      setSubmitError(error.message || 'Could not save the hazard report.')
     }
-    const existing = getHazards()
-    saveHazards([...existing, newHazard])
-    setSubmitted(true)
-    setTimeout(() => {
-      onSubmit?.(newHazard)
-      onClose?.()
-    }, 1500)
   }
 
   return (
@@ -120,6 +106,7 @@ export default function ReportHazardModal({ onClose, onSubmit, defaultLat, defau
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {submitError && <div style={{ color: 'var(--red)', fontSize: 12 }}>{submitError}</div>}
             {/* Hazard Type */}
             <div className="input-group">
               <label className="input-label">Hazard Type</label>

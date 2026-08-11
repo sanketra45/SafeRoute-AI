@@ -47,8 +47,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/hazards").permitAll()
                         .requestMatchers("/api/weather", "/api/traffic").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/safe-route").permitAll()
                         // WebSocket handshake
-                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/ws/**", "/ws-native/**").permitAll()
                         // Admin only
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         // Everything else requires authentication

@@ -41,7 +41,18 @@ public class WeatherService {
                 .toUriString();
 
         try {
-            return (Map<String, Object>) restTemplate.getForObject(url, Map.class);
+            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+            String condition = "CLEAR";
+            if (response != null && response.get("weather") instanceof java.util.List<?> weather
+                    && !weather.isEmpty() && weather.get(0) instanceof Map<?, ?> first) {
+                Object main = first.get("main");
+                if (main != null) condition = main.toString().toUpperCase();
+            }
+            Map<String, Object> main = response != null && response.get("main") instanceof Map
+                    ? (Map<String, Object>) response.get("main") : Map.of();
+            return Map.of("condition", condition, "weather", condition,
+                    "temperature", main.getOrDefault("temp", 0),
+                    "humidity", main.getOrDefault("humidity", 0), "mock", false);
         } catch (Exception e) {
             return Map.of("error", "Failed to fetch weather: " + e.getMessage());
         }

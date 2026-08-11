@@ -20,6 +20,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Native WebSocket endpoint used by the React live-warning hook.
+        registry.addEndpoint("/ws-native")
+                .setAllowedOriginPatterns("http://localhost:5173", "http://localhost:3000");
         registry.addEndpoint("/ws")
                 // Allow React dev server origin
                 .setAllowedOriginPatterns("http://localhost:5173", "http://localhost:3000")

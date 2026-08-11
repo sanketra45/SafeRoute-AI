@@ -10,20 +10,15 @@ export default function LoginPage({ onLogin, onRegister }) {
   const [loading, setLoading] = useState(false)
   const [localError, setLocalError] = useState(null)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLocalError(null)
     clearError()
     if (!email.trim() || !password.trim()) { setLocalError('Please enter email and password.'); return }
     setLoading(true)
-    setTimeout(() => {
-      const ok = login(email.trim(), password)
-      if (ok) {
-        onLogin()
-      } else {
-        setLoading(false)
-      }
-    }, 600)
+    const ok = await login(email.trim(), password)
+    if (ok) onLogin()
+    else setLoading(false)
   }
 
   const displayError = localError || error

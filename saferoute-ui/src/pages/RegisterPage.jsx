@@ -12,7 +12,7 @@ export default function RegisterPage({ onRegister, onLogin }) {
   const [loading, setLoading] = useState(false)
   const [localError, setLocalError] = useState(null)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLocalError(null)
     clearError()
@@ -24,14 +24,9 @@ export default function RegisterPage({ onRegister, onLogin }) {
     if (!agreed) { setLocalError('Please agree to the Terms of Service.'); return }
 
     setLoading(true)
-    setTimeout(() => {
-      const ok = register(name.trim(), email.trim(), password)
-      if (ok) {
-        onRegister()
-      } else {
-        setLoading(false)
-      }
-    }, 700)
+    const ok = await register(name.trim(), email.trim(), password)
+    if (ok) onRegister()
+    else setLoading(false)
   }
 
   const displayError = localError || error

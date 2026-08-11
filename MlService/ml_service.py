@@ -21,7 +21,7 @@ EXACT feature order the model was trained on:
   density_enc, accident_count, is_night, is_peak, is_bad_weather
 """
 
-import os, pathlib, logging, threading, json
+import os, pathlib, logging, threading, json, re
 from datetime import datetime
 
 # Load .env
@@ -337,7 +337,10 @@ def safe_route():
 
     try:
         from risk_router import compare_routes
-        result = compare_routes(G, origin_lat, origin_lon, dest_lat, dest_lon)
+        result = compare_routes(G, origin_lat, origin_lon, dest_lat, dest_lon, {
+            "traffic": data.get("traffic"),
+            "weather": data.get("weather"),
+        })
     except Exception as e:
         log.exception("Routing error")
         return jsonify({"error": f"Routing failed: {e}"}), 500
@@ -374,6 +377,7 @@ def safe_route():
         "fastRiskScore": fast["avg_risk_score"],
         "message":       message,
         "comparison":    comp,
+        "liveConditions": safe.get("live_conditions", {}),
     })
 
 
@@ -383,6 +387,25 @@ def safe_route():
 import requests as req_lib
 
 _geocode_cache = {}
+_NAGPUR_PLACES = {
+    "nagpur airport": (21.0922, 79.0472), "dr. babasaheb ambedkar international airport": (21.0922, 79.0472),
+    "civil lines": (21.1580, 79.0510), "sitabuldi": (21.1458, 79.0882),
+    "cotton market": (21.1461, 79.1014), "zero mile": (21.1451, 79.0849),
+    "wardha road": (21.1250, 79.0800), "manish nagar": (21.1160, 79.0570),
+    "dharampeth": (21.1455, 79.0638), "nagpur railway station": (21.1458, 79.0882),
+}
+
+def _local_geocode(query, limit):
+    normalized = query.strip().lower()
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*", normalized)
+    if match:
+        lat, lon = float(match.group(1)), float(match.group(2))
+        if 20.0 <= lat <= 22.5 and 78.0 <= lon <= 80.5:
+            return [{"display_name": f"{lat:.5f}, {lon:.5f}", "lat": str(lat), "lon": str(lon)}]
+    return [
+        {"display_name": f"{name.title()}, Nagpur, India", "lat": str(lat), "lon": str(lon)}
+        for name, (lat, lon) in _NAGPUR_PLACES.items() if normalized in name or name in normalized
+    ][:limit]
 
 @app.route("/geocode", methods=["GET"])
 def geocode_proxy():
@@ -394,9 +417,12 @@ def geocode_proxy():
     if cache_key in _geocode_cache:
         return jsonify(_geocode_cache[cache_key])
 
-    results = _photon(q, limit)
+    results = _local_geocode(q, limit) or _photon(q, limit)
     if not results and "nagpur" not in q.lower():
         results = _photon(f"{q} Nagpur", limit)
+    # Photon can rate-limit demo traffic; these local Nagpur fallbacks keep the
+    # route picker usable even when the public geocoder is unavailable.
+    results = results or _local_geocode(q, limit)
     _geocode_cache[cache_key] = results
     return jsonify(results)
 

@@ -12,6 +12,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/ws-native': {
+        target: 'ws://localhost:8080',
+        ws: true,
+        changeOrigin: true,
+      },
       // Python ML microservice
       '/ml': {
         target: 'http://localhost:5001',

@@ -64,6 +64,12 @@ public class HazardService {
         return toDto(hazardRepository.save(hazard));
     }
 
+    public void deleteHazard(Long id) {
+        ReportedHazard hazard = hazardRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Hazard not found: " + id));
+        hazardRepository.delete(hazard);
+    }
+
     private HazardDto toDto(ReportedHazard h) {
         HazardDto dto = new HazardDto();
         dto.setId(h.getId());

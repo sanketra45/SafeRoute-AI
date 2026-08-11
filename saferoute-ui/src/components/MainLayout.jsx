@@ -16,7 +16,7 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
   const [theme, setTheme] = useState(getTheme)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [alerts, setAlerts] = useState(0)
+  const [alerts, setAlerts] = useState(3)
   const [alertsOpen, setAlertsOpen] = useState(false)
   const [showHazardModal, setShowHazardModal] = useState(false)
   const [sidebarActive, setSidebarActive] = useState('route')
@@ -43,6 +43,12 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
     { id: 'hotspots', icon: <BarChart2 size={15} />, label: 'Hotspots', action: () => setActivePage('map') },
     { id: 'report', icon: <AlertTriangle size={15} />, label: 'Report Hazard', action: () => setShowHazardModal(true) },
     { id: 'settings', icon: <Settings size={15} />, label: 'Settings', action: () => {} },
+  ]
+
+  const recentAlerts = [
+    { id: 1, title: 'High Risk Zone', location: 'Sitabuldi Interchange', time: '2 min ago', color: 'var(--red)' },
+    { id: 2, title: 'Congestion Alert', location: 'Wardha Road Signal', time: '8 min ago', color: 'var(--orange)' },
+    { id: 3, title: 'Road Work', location: 'Dharampeth Square', time: '15 min ago', color: 'var(--yellow)' },
   ]
 
   const handleNav = (id) => {
@@ -120,9 +126,16 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
                 boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
               }}>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, marginBottom: 12, textTransform: 'uppercase' }}>Recent Alerts</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '12px 0', textAlign: 'center' }}>
-                  No active system alerts.
-                </div>
+                {recentAlerts.map((a) => (
+                  <div key={a.id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: a.color, marginTop: 5, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{a.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{a.location}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{a.time}</div>
+                    </div>
+                  </div>
+                ))}
                 <button
                   className="btn btn-outline"
                   style={{ width: '100%', justifyContent: 'center', marginTop: 12, fontSize: 11, padding: '7px' }}

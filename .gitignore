@@ -31,3 +31,15 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Node / Vite ###
+node_modules/
+dist/
+*.log
+
+### Python ###
+__pycache__/
+*.pyc
+MlService/data/*.graphml
+MlService/cache/
+

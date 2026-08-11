@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -56,5 +57,13 @@ public class HazardController {
     @PutMapping("/{id}/resolve")
     public ResponseEntity<HazardDto> resolve(@PathVariable Long id) {
         return ResponseEntity.ok(hazardService.resolveHazard(id));
+    }
+
+    /** Permanently removes a false or obsolete report. Admins only. */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        hazardService.deleteHazard(id);
+        return ResponseEntity.noContent().build();
     }
 }

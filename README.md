@@ -28,6 +28,23 @@
 2. To run the Frontend
    npm run dev
 
+-------------LIVE ROUTING INTEGRATION----------------------
+
+The navigation flow is:
+React Navigate page -> Spring Boot POST /api/safe-route -> Python POST /safe-route.
+Spring Boot fetches current TomTom traffic flow and OpenWeatherMap conditions at the
+route origin, then includes the normalized values in the Python A* request. API keys
+remain on the server.
+
+Set these values before starting Spring Boot (or place them in application.properties):
+
+weather.api.key=YOUR_OPENWEATHERMAP_KEY
+traffic.api.key=YOUR_TOMTOM_KEY
+
+Without keys, the backend returns clearly marked mock weather/traffic values, so the
+full route flow remains usable in demonstrations. New hazard reports are broadcast
+over STOMP at /topic/hazards and displayed by both map pages through /ws-native.
+
 
 
 

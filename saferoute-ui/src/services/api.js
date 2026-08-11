@@ -71,14 +71,16 @@ export async function predictRisk(params) {
   })
 }
 
-// ─── Route Planning (ML service → /ml/safe-route) ──────────
+// ─── Route Planning (Spring Boot → ML service) ─────────────
+// Spring Boot enriches the request with TomTom/OpenWeather data, keeping both
+// provider keys off the client.
 
 /**
  * @param {{ originLat, originLon, destLat, destLon }} params
  * @returns {{ safeRoute, fastRoute, safeDistance, fastDistance, safeRiskScore, fastRiskScore, message }}
  */
 export async function getSafeRoute(params) {
-  return request(`${ML_BASE}/safe-route`, {
+  return request(`${API_BASE}/safe-route`, {
     method: 'POST',
     body: JSON.stringify(params),
   })
@@ -124,4 +126,20 @@ export async function getAdminStats() {
 
 export async function getHotspots() {
   return request(`${API_BASE}/admin/hotspots`)
+}
+
+// ─── Shared hazard map (Spring Boot + WebSocket) ─────────────
+
+export async function getHazards() {
+  return request(`${API_BASE}/hazards`)
+}
+
+export async function reportHazard(params) {
+  return request(`${API_BASE}/hazards`, { method: 'POST', body: JSON.stringify(params) })
+}
+
+export async function deleteHazard(id) {
+  const token = getToken()
+  const res = await fetch(`${API_BASE}/hazards/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`)
 }
