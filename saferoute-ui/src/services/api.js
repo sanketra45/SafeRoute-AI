@@ -123,5 +123,6 @@ export async function getAdminStats() {
 }
 
 export async function getHotspots() {
-  return request(`${API_BASE}/admin/hotspots`)
+  // /api/hazards returns all ACTIVE hazards from HazardController (public endpoint)
+  return request(`${API_BASE}/hazards`)
 }

@@ -1,14 +1,14 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
   Navigation, MapPin, Clock, Shield, AlertTriangle,
-  CheckCircle, RefreshCw, Loader, Locate
+  CheckCircle, RefreshCw, Loader, Locate, Search, X
 } from 'lucide-react'
 import { useProximityAlerts } from '../hooks/useProximityAlerts'
 import ProximityAlertBanner from '../components/ProximityAlertBanner'
-import { getHotspots } from '../services/api'
+import { getHotspots, getSafeRoute } from '../services/api'
 
 // Fix Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl
@@ -36,28 +36,110 @@ function getStoredHazards() {
   try { return JSON.parse(localStorage.getItem('saferoute_hazards') || '[]') } catch { return [] }
 }
 
-// Geocode using Nominatim
-async function geocodeAddress(query) {
+// Nominatim autocomplete (debounced)
+async function nominatimSearch(query) {
+  if (!query || query.length < 3) return []
   const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Nagpur, India')}&limit=1`,
+    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Nagpur, India')}&limit=5&addressdetails=1`,
     { headers: { 'Accept-Language': 'en' } }
   )
   const data = await res.json()
-  if (!data.length) throw new Error(`Could not find: ${query}`)
-  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name }
+  return data.map(d => ({
+    label: d.display_name,
+    shortLabel: d.namedetails?.name || d.display_name.split(',')[0],
+    lat: parseFloat(d.lat),
+    lng: parseFloat(d.lon),
+  }))
 }
 
-// Get route from OSRM (free routing API)
-async function getOSRMRoute(fromLat, fromLng, toLat, toLng) {
-  const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&steps=true`
-  const res = await fetch(url)
-  const data = await res.json()
-  if (!data.routes?.length) throw new Error('No route found')
-  const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng])
-  const duration = Math.round(data.routes[0].duration / 60)
-  const distance = (data.routes[0].distance / 1000).toFixed(1)
-  const steps = data.routes[0].legs?.[0]?.steps?.map(s => s.maneuver?.instruction || s.name).filter(Boolean) || []
-  return { coords, duration, distance, steps }
+// LocationInput — input with live Nominatim autocomplete dropdown
+function LocationInput({ value, onChange, onSelect, placeholder, icon, disabled }) {
+  const [query, setQuery] = useState(value || '')
+  const [suggestions, setSuggestions] = useState([])
+  const [open, setOpen] = useState(false)
+  const debounceRef = useRef(null)
+
+  // Sync external value reset
+  useEffect(() => { setQuery(value || '') }, [value])
+
+  const handleChange = (e) => {
+    const q = e.target.value
+    setQuery(q)
+    onChange(q)
+    clearTimeout(debounceRef.current)
+    if (q.length < 3) { setSuggestions([]); setOpen(false); return }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await nominatimSearch(q)
+        setSuggestions(results)
+        setOpen(results.length > 0)
+      } catch { setSuggestions([]); setOpen(false) }
+    }, 400)
+  }
+
+  const handleSelect = (s) => {
+    setQuery(s.shortLabel)
+    onChange(s.shortLabel)
+    setSuggestions([])
+    setOpen(false)
+    onSelect(s)
+  }
+
+  const clear = () => { setQuery(''); onChange(''); setSuggestions([]); setOpen(false); onSelect(null) }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 1, pointerEvents: 'none' }}>
+        {icon}
+      </div>
+      <input
+        className="input"
+        value={query}
+        onChange={handleChange}
+        onFocus={() => suggestions.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 180)}
+        style={{ paddingLeft: 32, paddingRight: query ? 36 : 12 }}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoComplete="off"
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={clear}
+          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}
+        >
+          <X size={12} />
+        </button>
+      )}
+      {open && suggestions.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 9999,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          marginTop: 4, overflow: 'hidden',
+        }}>
+          {suggestions.map((s, i) => (
+            <div
+              key={i}
+              onMouseDown={() => handleSelect(s)}
+              style={{
+                padding: '10px 14px', cursor: 'pointer', fontSize: 12,
+                borderBottom: i < suggestions.length - 1 ? '1px solid var(--border)' : 'none',
+                display: 'flex', flexDirection: 'column', gap: 2,
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-base)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.shortLabel}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function MapController({ center, zoom }) {
@@ -69,18 +151,24 @@ function MapController({ center, zoom }) {
 }
 
 export default function NavigatePage() {
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [fromText, setFromText] = useState('')
+  const [toText, setToText] = useState('')
+  const [fromCoords, setFromCoords] = useState(null)
+  const [toCoords, setToCoords] = useState(null)
+
   const [navigating, setNavigating] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [routeCoords, setRouteCoords] = useState(null)
+
+  const [safeRoute, setSafeRoute] = useState(null)   // [{lat,lng},...] from ML
+  const [fastRoute, setFastRoute] = useState(null)   // [{lat,lng},...] from ML
+  const [showRoute, setShowRoute] = useState('safe') // 'safe' | 'fast' | 'both'
+  const [routeInfo, setRouteInfo] = useState(null)
+  const [liveConditions, setLiveConditions] = useState(null)
+
   const [userPos, setUserPos] = useState(null)
-  const [fromCoords, setFromCoords] = useState(null)
-  const [toCoords, setToCoords] = useState(null)
   const [mapCenter, setMapCenter] = useState([21.1458, 79.0882])
   const [locating, setLocating] = useState(false)
-  const [routeInfo, setRouteInfo] = useState(null)
   const [hotspots, setHotspots] = useState([])
   const watchRef = useRef(null)
 
@@ -97,7 +185,9 @@ export default function NavigatePage() {
     setLocating(true)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setFrom(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`)
+        const label = `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`
+        setFromText(label)
+        setFromCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, label })
         setUserPos({ lat: pos.coords.latitude, lon: pos.coords.longitude })
         setMapCenter([pos.coords.latitude, pos.coords.longitude])
         setLocating(false)
@@ -107,28 +197,58 @@ export default function NavigatePage() {
   }
 
   const handleFindRoutes = async () => {
-    if (!from.trim() || !to.trim()) { setError('Please enter both source and destination.'); return }
+    if (!fromCoords || !toCoords) {
+      setError('Please select both a source and destination from the dropdown suggestions.')
+      return
+    }
     setLoading(true)
     setError(null)
-    setRouteCoords(null)
+    setSafeRoute(null)
+    setFastRoute(null)
     setRouteInfo(null)
-    try {
-      const [fromResult, toResult] = await Promise.all([
-        geocodeAddress(from),
-        geocodeAddress(to),
-      ])
-      setFromCoords(fromResult)
-      setToCoords(toResult)
-      setMapCenter([(fromResult.lat + toResult.lat) / 2, (fromResult.lng + toResult.lng) / 2])
+    setLiveConditions(null)
 
-      const osrm = await getOSRMRoute(fromResult.lat, fromResult.lng, toResult.lat, toResult.lng)
-      setRouteCoords(osrm.coords)
-      setRouteInfo({ duration: osrm.duration, distance: osrm.distance, steps: osrm.steps })
+    try {
+      // Center map between the two points immediately
+      setMapCenter([(fromCoords.lat + toCoords.lat) / 2, (fromCoords.lng + toCoords.lng) / 2])
+
+      // Call ML service A* safe-route
+      const result = await getSafeRoute({
+        originLat: fromCoords.lat,
+        originLon: fromCoords.lng,
+        destLat: toCoords.lat,
+        destLon: toCoords.lng,
+      })
+
+      // ML returns [{lat, lon}, ...] — convert to Leaflet [[lat, lng], ...]
+      const toLeaflet = (arr) => (arr || []).map(c => [c.lat, c.lon ?? c.lng])
+
+      setSafeRoute(toLeaflet(result.safeRoute))
+      setFastRoute(toLeaflet(result.fastRoute))
+
+      const comp = result.comparison || {}
+      setRouteInfo({
+        safeDistance: result.safeDistance,
+        fastDistance: result.fastDistance,
+        safeRisk: result.safeRiskScore,
+        fastRisk: result.fastRiskScore,
+        extraKm: comp.extra_distance_km ?? 0,
+        riskReductionPct: comp.risk_reduction_pct ?? 0,
+        recommendation: comp.recommendation || '',
+        message: result.message || '',
+      })
+      setLiveConditions(result.liveConditions || null)
     } catch (err) {
-      setError(err.message || 'Could not find route.')
+      setError(err.message || 'Could not find route. Make sure the ML service is running.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSwap = () => {
+    setFromText(toText); setToText(fromText)
+    setFromCoords(toCoords); setToCoords(fromCoords)
+    setSafeRoute(null); setFastRoute(null); setRouteInfo(null)
   }
 
   const startNavigation = () => {
@@ -139,9 +259,7 @@ export default function NavigatePage() {
         setUserPos(newPos)
         setMapCenter([pos.coords.latitude, pos.coords.longitude])
       },
-      () => {
-        setUserPos({ lat: 21.1458, lon: 79.0882 })
-      },
+      () => { setUserPos({ lat: 21.1458, lon: 79.0882 }) },
       { enableHighAccuracy: true, maximumAge: 3000 }
     )
   }
@@ -153,6 +271,13 @@ export default function NavigatePage() {
     setUserPos(null)
   }
 
+  // Which route coords to show on map
+  const displayedRoute = showRoute === 'both'
+    ? null // both shown separately below
+    : showRoute === 'fast' ? fastRoute : safeRoute
+
+  const fmtDist = (m) => m ? (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`) : '—'
+
   return (
     <div className="page">
       <style>{`
@@ -162,49 +287,44 @@ export default function NavigatePage() {
         }
       `}</style>
 
-      {/* Proximity Alert Banner */}
       {navigating && <ProximityAlertBanner nearbyHazards={nearbyHazards} />}
 
       <div className="section-header" style={{ marginBottom: 20 }}>
         <div>
           <div className="section-title">Route Navigator</div>
-          <div className="section-sub">Real-time path planning for Nagpur</div>
+          <div className="section-sub">AI-powered safe path planning for Nagpur</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div className="pulse-dot" />
-          <span style={{ fontSize: 11, color: 'var(--accent)' }}>Live GPS Router</span>
+          <span style={{ fontSize: 11, color: 'var(--accent)' }}>ML A* Router</span>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 20 }} className="nav-grid">
-        {/* LEFT: Input + Route Card */}
+        {/* LEFT: Inputs + Route Info */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* Route Input */}
+
+          {/* Route Input Card */}
           <div className="card">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {/* FROM */}
               <div style={{ position: 'relative' }}>
-                <div style={{
-                  position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-                  width: 10, height: 10, borderRadius: '50%',
-                  background: 'var(--accent)', border: '2px solid var(--bg-base)', zIndex: 1,
-                }} />
-                <input
-                  className="input"
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                  style={{ paddingLeft: 32, paddingRight: 42 }}
-                  placeholder="From — type or use GPS"
+                <LocationInput
+                  value={fromText}
+                  onChange={setFromText}
+                  onSelect={(s) => { if (s) { setFromCoords(s); setFromText(s.shortLabel) } else setFromCoords(null) }}
+                  placeholder="From — type to search"
+                  icon={<div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--accent)', border: '2px solid var(--bg-base)' }} />}
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={handleGetCurrentLocation}
                   disabled={locating}
-                  title="Use current location"
+                  title="Use current GPS location"
                   style={{
-                    position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--accent)', padding: 4,
+                    position: 'absolute', right: fromText ? 30 : 8, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: 4, zIndex: 2,
                   }}
                 >
                   {locating ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Locate size={13} />}
@@ -213,83 +333,110 @@ export default function NavigatePage() {
 
               {/* SWAP */}
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <button
-                  className="icon-btn"
-                  onClick={() => { const t = from; setFrom(to); setTo(t) }}
-                  title="Swap source and destination"
-                >
+                <button className="icon-btn" onClick={handleSwap} title="Swap source and destination">
                   <RefreshCw size={13} />
                 </button>
               </div>
 
               {/* TO */}
-              <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 1 }}>
-                  <MapPin size={14} color="var(--red)" />
-                </div>
-                <input
-                  className="input"
-                  value={to}
-                  onChange={(e) => setTo(e.target.value)}
-                  style={{ paddingLeft: 32 }}
-                  placeholder="To — destination"
-                />
-              </div>
+              <LocationInput
+                value={toText}
+                onChange={setToText}
+                onSelect={(s) => { if (s) { setToCoords(s); setToText(s.shortLabel) } else setToCoords(null) }}
+                placeholder="To — destination"
+                icon={<MapPin size={14} color="var(--red)" />}
+                disabled={loading}
+              />
 
               <button
                 className="btn btn-primary"
                 style={{ width: '100%', justifyContent: 'center' }}
                 onClick={handleFindRoutes}
-                disabled={loading}
+                disabled={loading || !fromCoords || !toCoords}
               >
                 {loading
-                  ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Finding Route...</>
+                  ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Calculating Route...</>
                   : <><Navigation size={14} /> Find Safe Route</>
                 }
               </button>
 
-              {error && (
-                <div style={{ fontSize: 11, color: 'var(--orange)', padding: '4px 0' }}>⚠ {error}</div>
+              {!fromCoords && fromText.length > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 0' }}>
+                  ↑ Select a suggestion from the dropdown
+                </div>
               )}
+              {error && <div style={{ fontSize: 11, color: 'var(--orange)', padding: '4px 0' }}>⚠ {error}</div>}
             </div>
           </div>
 
-          {/* Calculated Route Info Card */}
+          {/* Route Info Card */}
           {routeInfo ? (
-            <div className="card" style={{ border: '1px solid var(--accent)', background: 'rgba(0,229,160,0.05)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span className="badge badge-low">Calculated Route</span>
-                <CheckCircle size={16} color="var(--accent)" />
+            <div className="card" style={{ border: '1px solid var(--accent)', background: 'rgba(0,229,160,0.04)' }}>
+              {/* Route toggle */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                {[['safe', 'Safe Route'], ['fast', 'Fast Route'], ['both', 'Both']].map(([v, label]) => (
+                  <button
+                    key={v}
+                    onClick={() => setShowRoute(v)}
+                    style={{
+                      flex: 1, padding: '6px 0', borderRadius: 7, fontSize: 11, cursor: 'pointer',
+                      border: showRoute === v ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      background: showRoute === v ? 'var(--accent)' : 'var(--bg-base)',
+                      color: showRoute === v ? '#080c0e' : 'var(--text-secondary)',
+                      fontWeight: showRoute === v ? 700 : 400,
+                    }}
+                  >{label}</button>
+                ))}
               </div>
 
-              <div style={{ display: 'flex', gap: 16, margin: '12px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  <Clock size={14} color="var(--accent)" /> ~{routeInfo.duration} min
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  <MapPin size={14} color="var(--accent)" /> {routeInfo.distance} km
-                </div>
+              {/* Safe vs Fast comparison */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                {[
+                  { label: '🛡 Safe Route', dist: routeInfo.safeDistance, risk: routeInfo.safeRisk, color: 'var(--accent)' },
+                  { label: '⚡ Fast Route', dist: routeInfo.fastDistance, risk: routeInfo.fastRisk, color: 'var(--orange)' },
+                ].map(r => (
+                  <div key={r.label} style={{ background: 'var(--bg-base)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{r.label}</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 800, color: r.color }}>{fmtDist(r.dist)}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                      Risk: {r.risk !== undefined ? (r.risk * 100).toFixed(1) + '%' : '—'}
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Live route mapped via OpenStreetMap and OSRM telemetry.
-              </div>
+              {routeInfo.riskReductionPct > 0 && (
+                <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 6, fontWeight: 600 }}>
+                  ✓ Safe route reduces risk by {routeInfo.riskReductionPct.toFixed(1)}%
+                  {routeInfo.extraKm > 0 && ` (+${routeInfo.extraKm.toFixed(2)} km)`}
+                </div>
+              )}
+
+              {routeInfo.recommendation && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{routeInfo.recommendation}</div>
+              )}
+
+              {liveConditions && (
+                <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 12 }}>
+                  <span>🚦 Congestion: {(liveConditions.congestion * 100).toFixed(0)}%</span>
+                  <span>🌧 Weather risk: {(liveConditions.weather_risk * 100).toFixed(0)}%</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="card" style={{ padding: 24, textAlign: 'center' }}>
               <Navigation size={28} color="var(--text-muted)" style={{ marginBottom: 8, opacity: 0.5 }} />
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>No Active Route</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                Enter your starting location and destination above to compute a route.
+                Search and select your start and destination above. The ML service will compute both safe and fast routes.
               </div>
             </div>
           )}
         </div>
 
-        {/* RIGHT: Map + Turn-by-turn */}
+        {/* RIGHT: Map */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* REAL LEAFLET MAP */}
-          <div className="map-container" style={{ height: 320, borderRadius: 12 }}>
+          <div className="map-container" style={{ height: 460, borderRadius: 12, position: 'relative' }}>
             <MapContainer
               center={mapCenter}
               zoom={13}
@@ -301,25 +448,27 @@ export default function NavigatePage() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
-              {/* Route polyline */}
-              {routeCoords && (
-                <Polyline
-                  positions={routeCoords}
-                  color="#00e5a0"
-                  weight={5}
-                  opacity={0.85}
-                />
+              {/* Safe route — green */}
+              {(showRoute === 'safe' || showRoute === 'both') && safeRoute && safeRoute.length > 0 && (
+                <Polyline positions={safeRoute} color="#00e5a0" weight={5} opacity={0.9} />
               )}
 
-              {/* Origin/Dest markers */}
+              {/* Fast route — orange */}
+              {(showRoute === 'fast' || showRoute === 'both') && fastRoute && fastRoute.length > 0 && (
+                <Polyline positions={fastRoute} color="#ff9500" weight={4} opacity={0.7} dashArray="10 6" />
+              )}
+
+              {/* Origin marker */}
               {fromCoords && (
                 <Marker position={[fromCoords.lat, fromCoords.lng]} icon={createPinIcon('#00e5a0')}>
-                  <Popup><b>Start</b><br />{from}</Popup>
+                  <Popup><b>Start</b><br />{fromText}</Popup>
                 </Marker>
               )}
+
+              {/* Destination marker */}
               {toCoords && (
                 <Marker position={[toCoords.lat, toCoords.lng]} icon={createPinIcon('#ff4d4d')}>
-                  <Popup><b>Destination</b><br />{to}</Popup>
+                  <Popup><b>Destination</b><br />{toText}</Popup>
                 </Marker>
               )}
 
@@ -329,65 +478,52 @@ export default function NavigatePage() {
                   <Marker position={[userPos.lat, userPos.lon]} icon={createUserIcon()}>
                     <Popup>You are here</Popup>
                   </Marker>
-                  <Circle
-                    center={[userPos.lat, userPos.lon]}
-                    radius={100}
-                    color="#4db8ff"
-                    fillColor="#4db8ff"
-                    fillOpacity={0.1}
-                    weight={1}
-                  />
+                  <Circle center={[userPos.lat, userPos.lon]} radius={100} color="#4db8ff" fillColor="#4db8ff" fillOpacity={0.1} weight={1} />
                 </>
               )}
 
-              {/* Hotspot markers on nav map */}
-              {hotspots.filter(h => h.risk === 'CRITICAL' || h.risk === 'HIGH').map((h, i) => (
-                <Marker key={h.id || i} position={[h.lat || h.latitude, h.lng || h.longitude]} icon={createPinIcon('#ff4d4d')}>
-                  <Popup><b style={{ color: '#ff4d4d' }}>{h.risk || 'HAZARD'}</b><br />{h.label || h.location}<br />{h.detail || h.description}</Popup>
-                </Marker>
-              ))}
+              {/* High-risk hotspot markers from backend */}
+              {hotspots.filter(h => h.severity === 'CRITICAL' || h.risk === 'CRITICAL').map((h, i) => {
+                const lat = h.latitude ?? h.lat
+                const lng = h.longitude ?? h.lng
+                if (!lat || !lng) return null
+                return (
+                  <Marker key={h.id || i} position={[lat, lng]} icon={createPinIcon('#ff4d4d')}>
+                    <Popup>
+                      <b style={{ color: '#ff4d4d' }}>CRITICAL</b><br />
+                      {h.hazardType || h.label || ''}<br />
+                      {h.description || ''}
+                    </Popup>
+                  </Marker>
+                )
+              })}
 
               <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 800, background: 'rgba(8,12,14,0.9)', borderRadius: 8, padding: '6px 12px', fontSize: 11, color: '#aaa', pointerEvents: 'none' }}>
-                {routeInfo ? 'Route Active' : 'Map View'}
+                {safeRoute ? 'Route Active' : 'Map View'}
               </div>
             </MapContainer>
+
+            {/* Route legend */}
+            {routeInfo && (
+              <div style={{ position: 'absolute', bottom: 12, left: 12, zIndex: 800, background: 'rgba(8,12,14,0.92)', borderRadius: 8, padding: '8px 12px', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 20, height: 3, background: '#00e5a0', borderRadius: 2 }} />
+                  <span style={{ color: 'var(--text-secondary)' }}>Safe Route</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 20, height: 3, background: '#ff9500', borderRadius: 2, backgroundImage: 'repeating-linear-gradient(90deg, #ff9500 0 6px, transparent 6px 12px)' }} />
+                  <span style={{ color: 'var(--text-secondary)' }}>Fast Route</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Turn by Turn Directions */}
-          {routeInfo?.steps && routeInfo.steps.length > 0 && (
-            <div className="card">
-              <div className="section-header" style={{ marginBottom: 14 }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700 }}>Directions</div>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{routeInfo.duration} min • {routeInfo.distance} km</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, maxHeight: 200, overflowY: 'auto' }}>
-                {routeInfo.steps.map((step, i) => (
-                  <div key={i} style={{
-                    display: 'flex', gap: 14, padding: '10px 0',
-                    borderBottom: i < routeInfo.steps.length - 1 ? '1px solid rgba(30,45,50,0.5)' : 'none',
-                    alignItems: 'center',
-                  }}>
-                    <div style={{
-                      width: 24, height: 24, borderRadius: '50%',
-                      background: 'var(--bg-base)', border: '1px solid var(--border)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 11, fontWeight: 700, color: 'var(--accent)', flexShrink: 0,
-                    }}>
-                      {i + 1}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>{step}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Start Navigation */}
+          {/* Start/Stop Navigation */}
           <button
             className={`btn ${navigating ? 'btn-danger' : 'btn-primary'}`}
             style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: 15, borderRadius: 10 }}
             onClick={navigating ? stopNavigation : startNavigation}
-            disabled={!routeCoords && !userPos}
+            disabled={!safeRoute && !userPos}
           >
             {navigating
               ? <><Shield size={16} /> Stop Navigation</>
