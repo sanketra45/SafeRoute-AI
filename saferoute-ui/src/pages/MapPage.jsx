@@ -83,9 +83,9 @@ export default function MapPage() {
   const allHotspots = [
     ...apiHotspots.filter((h) => {
       if (filter === 'all') return true
-      if (filter === 'critical') return h.risk === 'CRITICAL'
-      if (filter === 'high') return h.risk === 'HIGH'
-      if (filter === 'safe') return h.risk === 'LOW'
+      if (filter === 'critical') return h.severity === 'CRITICAL' || h.risk === 'CRITICAL'
+      if (filter === 'high') return h.severity === 'HIGH' || h.risk === 'HIGH'
+      if (filter === 'safe') return h.severity === 'LOW' || h.risk === 'LOW'
       return true
     }),
     ...userHazards,
@@ -93,8 +93,9 @@ export default function MapPage() {
 
   const getIcon = (h) => {
     if (h.userReported) return createHazardIcon()
-    const colors = { red: '#ff4d4d', orange: '#ff9500', green: '#00e5a0', CRITICAL: '#ff4d4d', HIGH: '#ff9500', LOW: '#00e5a0' }
-    return createColoredIcon(colors[h.type] || colors[h.risk] || '#4db8ff')
+    const sev = h.severity || h.risk || ''
+    const colors = { CRITICAL: '#ff4d4d', HIGH: '#ff9500', MEDIUM: '#ff9500', LOW: '#00e5a0', red: '#ff4d4d', orange: '#ff9500', green: '#00e5a0' }
+    return createColoredIcon(colors[sev] || colors[h.type] || '#4db8ff')
   }
 
   return (
@@ -185,28 +186,35 @@ export default function MapPage() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
 
-              {allHotspots.map((h, i) => (
-                <Marker key={h.id || i} position={[h.lat || h.latitude, h.lng || h.longitude]} icon={getIcon(h)}>
-                  <Popup>
-                    <div style={{ fontFamily: 'Inter, sans-serif', minWidth: 160 }}>
-                      <div style={{
-                        fontSize: 10, fontWeight: 700, letterSpacing: 1,
-                        color: h.risk === 'CRITICAL' ? '#ff4d4d' : h.risk === 'HIGH' ? '#ff9500' : h.userReported ? '#ffd60a' : '#00e5a0',
-                        marginBottom: 4,
-                      }}>
-                        {h.userReported ? '⚠ USER REPORTED' : h.risk || 'HAZARD'}
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{h.label || h.location || h.description || 'Reported Location'}</div>
-                      <div style={{ fontSize: 12, color: '#666' }}>{h.detail || h.description || 'Live safety record'}</div>
-                      {h.userReported && h.reportedAt && (
-                        <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
-                          {new Date(h.reportedAt).toLocaleString()}
+              {allHotspots.map((h, i) => {
+                const lat = h.latitude
+                const lng = h.longitude
+                if (!lat || !lng) return null
+                const sev = h.severity || 'ACTIVE'
+                const sevColor = sev === 'CRITICAL' ? '#ff4d4d' : sev === 'HIGH' ? '#ff9500' : h.userReported ? '#ffd60a' : '#00e5a0'
+                return (
+                  <Marker key={h.id || i} position={[lat, lng]} icon={getIcon(h)}>
+                    <Popup>
+                      <div style={{ fontFamily: 'Inter, sans-serif', minWidth: 160 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: sevColor, marginBottom: 4 }}>
+                          {h.userReported ? '⚠ USER REPORTED' : sev}
                         </div>
-                      )}
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+                        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>
+                          {h.hazardType || 'Reported Hazard'}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#666' }}>
+                          {h.description || 'Live safety record'}
+                        </div>
+                        {h.reportedAt && (
+                          <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+                            {new Date(h.reportedAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </Popup>
+                  </Marker>
+                )
+              })}
 
               <UserLocationButton />
             </MapContainer>
@@ -258,8 +266,8 @@ export default function MapPage() {
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, letterSpacing: 1, textTransform: 'uppercase' }}>Live Telemetry</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
-                { label: 'Active Alerts', value: String(allHotspots.filter(h => h.risk === 'CRITICAL').length), color: 'var(--red)' },
-                { label: 'Safe Zones', value: String(allHotspots.filter(h => h.risk === 'LOW').length), color: 'var(--accent)' },
+                { label: 'Active Alerts', value: String(allHotspots.filter(h => h.severity === 'CRITICAL').length), color: 'var(--red)' },
+                { label: 'Safe Zones', value: String(allHotspots.filter(h => h.severity === 'LOW').length), color: 'var(--accent)' },
                 { label: 'User Reports', value: String(userHazards.length), color: 'var(--yellow)' },
                 { label: 'Database Records', value: String(apiHotspots.length), color: 'var(--blue)' },
               ].map((s) => (
@@ -329,26 +337,29 @@ export default function MapPage() {
           </div>
         ) : (
           <div className="grid-4 hotspot-grid">
-            {allHotspots.map((h, idx) => (
-              <div key={h.id || idx} className="card card-sm" style={{ cursor: 'pointer', transition: 'all 0.2s' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                  <MapPin size={14} color={
-                    h.userReported ? 'var(--yellow)' :
-                    h.type === 'red' || h.risk === 'CRITICAL' ? 'var(--red)' :
-                    h.type === 'orange' || h.risk === 'HIGH' ? 'var(--orange)' : 'var(--accent)'
-                  } />
-                  <span className={`badge badge-${
-                    h.risk === 'CRITICAL' ? 'critical' :
-                    h.risk === 'HIGH' ? 'high' :
-                    h.risk === 'MEDIUM' ? 'medium' : 'low'
-                  }`}>
-                    {h.userReported ? '⚠ Reported' : h.risk || 'ACTIVE'}
-                  </span>
+            {allHotspots.map((h, idx) => {
+              const sev = h.severity || h.risk || 'ACTIVE'
+              const pinColor = h.userReported ? 'var(--yellow)' :
+                sev === 'CRITICAL' ? 'var(--red)' :
+                sev === 'HIGH' ? 'var(--orange)' : 'var(--accent)'
+              const badgeClass = sev === 'CRITICAL' ? 'critical' : sev === 'HIGH' ? 'high' : sev === 'MEDIUM' ? 'medium' : 'low'
+              return (
+                <div key={h.id || idx} className="card card-sm" style={{ cursor: 'pointer', transition: 'all 0.2s' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <MapPin size={14} color={pinColor} />
+                    <span className={`badge badge-${badgeClass}`}>
+                      {h.userReported ? '⚠ Reported' : sev}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                    {h.hazardType || h.label || h.location || 'Hazard'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {h.description || h.detail || 'Geo-coordinate hazard'}
+                  </div>
                 </div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{h.label || h.location || 'Location Marker'}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.detail || h.description || 'Geo-coordinate hazard'}</div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

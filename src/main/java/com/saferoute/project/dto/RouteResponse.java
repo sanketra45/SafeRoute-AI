@@ -21,4 +21,7 @@ public class RouteResponse {
 
     // Comparison stats from ML service (extra_distance_km, risk_reduction_pct, recommendation, etc.)
     private Map<String, Object> comparison;
+
+    // Weather and traffic values that influenced this route calculation.
+    private Map<String, Object> liveConditions;
 }

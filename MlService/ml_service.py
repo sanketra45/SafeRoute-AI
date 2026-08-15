@@ -337,7 +337,10 @@ def safe_route():
 
     try:
         from risk_router import compare_routes
-        result = compare_routes(G, origin_lat, origin_lon, dest_lat, dest_lon)
+        result = compare_routes(G, origin_lat, origin_lon, dest_lat, dest_lon, {
+            "traffic": data.get("traffic"),
+            "weather": data.get("weather"),
+        })
     except Exception as e:
         log.exception("Routing error")
         return jsonify({"error": f"Routing failed: {e}"}), 500
@@ -374,6 +377,7 @@ def safe_route():
         "fastRiskScore": fast["avg_risk_score"],
         "message":       message,
         "comparison":    comp,
+        "liveConditions": safe.get("live_conditions", {}),
     })
 
 
