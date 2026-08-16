@@ -34,26 +34,46 @@ const createHazardIcon = () => L.divIcon({
 
 function UserLocationButton() {
   const map = useMap()
+  const [locating, setLocating] = useState(false)
+
   const locate = () => {
+    setLocating(true)
     navigator.geolocation.getCurrentPosition(
-      (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
-      () => alert('Location permission denied.')
+      (pos) => {
+        map.setView([pos.coords.latitude, pos.coords.longitude], 16)
+        setLocating(false)
+      },
+      () => {
+        alert('Location permission denied or unavailable.')
+        setLocating(false)
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
     )
   }
+
   return (
-    <button
-      onClick={locate}
-      title="My Location"
+    <div
       style={{
-        position: 'absolute', bottom: 80, right: 12, zIndex: 800,
-        width: 36, height: 36, borderRadius: 8,
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        color: 'var(--accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        position: 'absolute', bottom: 100, right: 12, zIndex: 1000,
       }}
     >
-      <Locate size={15} />
-    </button>
+      <button
+        onClick={locate}
+        title="Go to My Location"
+        disabled={locating}
+        style={{
+          width: 40, height: 40, borderRadius: 10,
+          background: locating ? 'var(--accent-dim)' : 'var(--bg-card)',
+          border: '1px solid var(--accent)',
+          color: 'var(--accent)', cursor: locating ? 'not-allowed' : 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          transition: 'all 0.2s',
+        }}
+      >
+        <Locate size={16} style={{ animation: locating ? 'spin 1s linear infinite' : 'none' }} />
+      </button>
+    </div>
   )
 }
 
@@ -187,27 +207,31 @@ export default function MapPage() {
               />
 
               {allHotspots.map((h, i) => {
-                const lat = h.latitude
-                const lng = h.longitude
-                if (!lat || !lng) return null
-                const sev = h.severity || 'ACTIVE'
+                // Support both field naming conventions: lat/lng (user reported) and latitude/longitude (API)
+                const lat = h.latitude ?? h.lat
+                const lng = h.longitude ?? h.lng
+                if (lat == null || lng == null) return null
+                const sev = h.severity || h.risk || 'ACTIVE'
                 const sevColor = sev === 'CRITICAL' ? '#ff4d4d' : sev === 'HIGH' ? '#ff9500' : h.userReported ? '#ffd60a' : '#00e5a0'
                 return (
                   <Marker key={h.id || i} position={[lat, lng]} icon={getIcon(h)}>
                     <Popup>
-                      <div style={{ fontFamily: 'Inter, sans-serif', minWidth: 160 }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', minWidth: 180 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: sevColor, marginBottom: 4 }}>
                           {h.userReported ? '⚠ USER REPORTED' : sev}
                         </div>
-                        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>
-                          {h.hazardType || 'Reported Hazard'}
+                        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3, color: '#1a1a1a' }}>
+                          {h.hazardType || h.label || h.type || 'Reported Hazard'}
                         </div>
-                        <div style={{ fontSize: 12, color: '#666' }}>
-                          {h.description || 'Live safety record'}
+                        <div style={{ fontSize: 12, color: '#555' }}>
+                          {h.description || h.detail || 'Live safety record'}
                         </div>
+                        {h.location && (
+                          <div style={{ fontSize: 11, color: '#888', marginTop: 3 }}>📍 {h.location}</div>
+                        )}
                         {h.reportedAt && (
                           <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
-                            {new Date(h.reportedAt).toLocaleString()}
+                            🕐 {new Date(h.reportedAt).toLocaleString()}
                           </div>
                         )}
                       </div>
@@ -216,6 +240,7 @@ export default function MapPage() {
                 )
               })}
 
+              {/* UserLocationButton MUST be inside MapContainer to use useMap() hook */}
               <UserLocationButton />
             </MapContainer>
 
