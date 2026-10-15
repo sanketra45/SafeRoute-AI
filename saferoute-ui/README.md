@@ -11,7 +11,6 @@ A full-featured React + Vite UI for AI-powered safe routing in Nagpur.
 | Map | `/map` | Interactive hotspot map + live incident feed |
 | Navigate | `/navigate` | AI route planner with turn-by-turn |
 | Risk Analysis | `/risk` | Hazard charts, radar, hotspot table |
-| Leaderboard | `/leaderboard` | Driver rankings + podium + stats |
 | Admin | `/admin` | Full analytics dashboard with charts |
 
 ## Setup
@@ -44,7 +43,6 @@ npm run dev
 - ✅ Interactive map with hotspot markers
 - ✅ AI route planner with safety scores
 - ✅ Risk analysis with charts + radar
-- ✅ Driver leaderboard with podium
 - ✅ Admin analytics dashboard (stats, charts, donut, grid map)
 - ✅ Live alerts, pagination, search
 - ✅ Fully responsive

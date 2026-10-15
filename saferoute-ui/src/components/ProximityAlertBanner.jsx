@@ -17,10 +17,7 @@ export default function ProximityAlertBanner({ nearbyHazards, onDismiss }) {
   if (!visible?.length) return null
 
   const top = visible[0]
-  const riskColor =
-    top.hazard.risk === 'CRITICAL' ? 'var(--red)' :
-    top.hazard.risk === 'HIGH' ? 'var(--orange)' :
-    top.hazard.risk === 'MEDIUM' ? 'var(--yellow)' : 'var(--accent)'
+  const riskColor = 'var(--orange)'
 
   return (
     <div style={{
@@ -66,11 +63,11 @@ export default function ProximityAlertBanner({ nearbyHazards, onDismiss }) {
               </span>
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {hazard.label}
+              {String(hazard.hazardType || 'HAZARD').replaceAll('_', ' ')}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
               <Navigation size={10} style={{ display: 'inline', marginRight: 4 }} />
-              {hazard.detail || hazard.description || 'Proceed with caution'}
+              {hazard.description || 'Reported by a SafeRoute user'}
             </div>
           </div>
           <button

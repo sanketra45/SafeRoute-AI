@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import {
-  Shield, Map, Navigation, BarChart2, Trophy, Settings,
+  Shield, Map, Navigation, BarChart2, Settings,
   Sun, Moon, Bell, Monitor, AlertTriangle, Route,
   LogOut, Menu, X, ChevronRight, Activity, MapPin
 } from 'lucide-react'
@@ -33,7 +33,6 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
     { id: 'map', label: 'Map', icon: <Map size={13} /> },
     { id: 'navigate', label: 'Navigate', icon: <Navigation size={13} /> },
     { id: 'risk', label: 'Risk Analysis', icon: <BarChart2 size={13} /> },
-    { id: 'leaderboard', label: 'Leaderboard', icon: <Trophy size={13} /> },
     ...(user?.role === 'admin' ? [{ id: 'admin', label: 'Admin', icon: <Shield size={13} /> }] : []),
   ]
 
@@ -132,15 +131,6 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
                 </button>
               </div>
             )}
-          </div>
-
-          <div
-            className="score-pill"
-            style={{ cursor: 'pointer' }}
-            onClick={() => handleNav('leaderboard')}
-            title="Your Safety Score"
-          >
-            {user?.score ?? 75}% Score
           </div>
 
           <div className="avatar" title={user?.name || 'User'}>

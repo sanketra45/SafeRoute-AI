@@ -18,17 +18,25 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 
 /**
  * @param {{ lat: number, lon: number } | null} userPosition
- * @param {Array<{ lat: number, lng: number, label: string, risk: string }>} hazards
+ * @param {Array<{ id: number, latitude: number, longitude: number, hazardType: string, status: string }>} hazards
  * @param {number} radiusMeters
  * @returns {Array<{ hazard, distanceMeters }>}
  */
 export function useProximityAlerts(userPosition, hazards, radiusMeters = 500) {
   return useMemo(() => {
     if (!userPosition || !hazards?.length) return []
+    const seen = new Set()
     return hazards
+      .filter((h) => h?.status === 'ACTIVE' && Number.isFinite(Number(h.latitude)) && Number.isFinite(Number(h.longitude)))
+      .filter((h) => {
+        if (seen.has(h.id)) return false
+        seen.add(h.id)
+        return true
+      })
       .map((h) => ({
-        hazard: h,
-        distanceMeters: Math.round(haversineDistance(userPosition.lat, userPosition.lon, h.lat, h.lng)),
+        // This is a database-backed report, not a calculated blackspot severity.
+        hazard: { ...h, risk: h.severity || 'MEDIUM', label: String(h.hazardType || 'HAZARD').replaceAll('_', ' ') },
+        distanceMeters: Math.round(haversineDistance(userPosition.lat, userPosition.lon, h.latitude, h.longitude)),
       }))
       .filter((x) => x.distanceMeters <= radiusMeters)
       .sort((a, b) => a.distanceMeters - b.distanceMeters)

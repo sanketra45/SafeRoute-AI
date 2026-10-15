@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -36,5 +38,21 @@ public class AuthController {
     public ResponseEntity<LoginResponse> login(
             @Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    /**
+     * POST /api/auth/init-admin
+     * Body: { "name": "Admin", "email": "admin@example.com", "password": "...", "secret": "CHANGE_ME_ADMIN_SECRET" }
+     * Requires the server-side admin.init.secret property to be provided.
+     * Use this ONCE to create the first admin account, then remove or disable the secret.
+     */
+    @PostMapping("/init-admin")
+    public ResponseEntity<LoginResponse> initAdmin(@RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(authService.initAdmin(
+                body.getOrDefault("name", "System Admin"),
+                body.get("email"),
+                body.get("password"),
+                body.get("secret")
+        ));
     }
 }

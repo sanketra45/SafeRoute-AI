@@ -10,7 +10,16 @@ const ML_BASE  = '/ml'
 // ─── Helpers ──────────────────────────────────────────────
 
 function getToken() {
-  return localStorage.getItem('saferoute_token')
+  const directToken = localStorage.getItem('saferoute_token')
+  if (directToken) return directToken
+
+  // Keep protected API calls authenticated if an older/session-restored client has
+  // the token only inside the persisted application session.
+  try {
+    return JSON.parse(localStorage.getItem('saferoute_session') || 'null')?.token || null
+  } catch {
+    return null
+  }
 }
 
 async function request(url, options = {}) {
@@ -23,8 +32,20 @@ async function request(url, options = {}) {
   const res = await fetch(url, { ...options, headers })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || `HTTP ${res.status}`)
+    try {
+      const json = JSON.parse(text)
+      const msg = json?.error || json?.message || json?.detail || `HTTP ${res.status}`
+      throw new Error(msg)
+    } catch (parseErr) {
+      if (parseErr instanceof SyntaxError) {
+        throw new Error(text || `HTTP ${res.status}`)
+      }
+      throw parseErr
+    }
   }
+  // Handle empty response (e.g. 204 No Content)
+  const contentType = res.headers.get('content-type')
+  if (!contentType || !contentType.includes('application/json')) return {}
   return res.json()
 }
 
@@ -40,12 +61,10 @@ export async function login(email, password) {
 }
 
 export async function register({ name, email, password }) {
-  const data = await request(`${API_BASE}/auth/register`, {
+  return request(`${API_BASE}/auth/register`, {
     method: 'POST',
     body: JSON.stringify({ name, email, password }),
   })
-  if (data.token) localStorage.setItem('saferoute_token', data.token)
-  return data
 }
 
 export function logout() {
@@ -54,16 +73,6 @@ export function logout() {
 
 // ─── Risk Prediction (ML service → /ml/predict-risk) ───────
 
-/**
- * @param {Object} params
- * @param {number} params.latitude
- * @param {number} params.longitude
- * @param {string} params.timeOfDay   - MORNING_PEAK | DAY | EVENING_PEAK | NIGHT
- * @param {string} params.weatherCondition - CLEAR | RAIN | FOG | CLOUDY | HAZE
- * @param {string} params.trafficDensity   - LOW | MEDIUM | HIGH
- * @param {string} params.roadType         - MAIN_ROAD | HIGHWAY | JUNCTION | FLYOVER | RING_ROAD | URBAN
- * @returns {{ riskLevel: string, confidence: number, message: string }}
- */
 export async function predictRisk(params) {
   return request(`${ML_BASE}/predict-risk`, {
     method: 'POST',
@@ -73,15 +82,39 @@ export async function predictRisk(params) {
 
 // ─── Route Planning (ML service → /ml/safe-route) ──────────
 
-/**
- * @param {{ originLat, originLon, destLat, destLon }} params
- * @returns {{ safeRoute, fastRoute, safeDistance, fastDistance, safeRiskScore, fastRiskScore, message }}
- */
 export async function getSafeRoute(params) {
   return request(`${ML_BASE}/safe-route`, {
     method: 'POST',
     body: JSON.stringify(params),
   })
+}
+
+// ─── OSRM Fallback Route (public OSRM demo server) ─────────
+
+export async function getOsrmRoute(fromLat, fromLng, toLat, toLng) {
+  const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&steps=false`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('OSRM routing failed')
+  const data = await res.json()
+  if (!data.routes || data.routes.length === 0) throw new Error('No route found')
+  const route = data.routes[0]
+  const coords = route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
+  const distM = route.distance
+  return {
+    safeRoute: coords,
+    fastRoute: coords,
+    safeDistance: distM,
+    fastDistance: distM,
+    safeRiskScore: 0.3,
+    fastRiskScore: 0.3,
+    message: `Route via OSRM fallback (ML service offline). Distance: ${(distM / 1000).toFixed(2)} km.`,
+    comparison: {
+      extra_distance_km: 0,
+      risk_reduction_pct: 0,
+      recommendation: 'ML service unavailable — showing basic route',
+    },
+    isFallback: true,
+  }
 }
 
 // ─── Geocoding (ML service → /ml/geocode) ──────────────────
@@ -97,23 +130,24 @@ export async function mlHealth() {
   return request(`${ML_BASE}/health`)
 }
 
-// ─── Leaderboard (Spring Boot /api/leaderboard) ─────────────
+// ─── Hazards (Spring Boot /api/hazards) ─────────────────────
 
-export async function getLeaderboard() {
-  return request(`${API_BASE}/leaderboard`)
+export async function getHotspots() {
+  return request(`${API_BASE}/hazards`)
 }
 
-// ─── Driver Profile (Spring Boot /api/profile) ──────────────
-
-export async function getProfile() {
-  return request(`${API_BASE}/profile`)
-}
-
-export async function updateProfile(data) {
-  return request(`${API_BASE}/profile`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
+export async function reportHazard({ latitude, longitude, hazardType, severity, description }) {
+  return request(`${API_BASE}/hazards`, {
+    method: 'POST',
+    body: JSON.stringify({ latitude, longitude, hazardType, severity, description }),
   })
+}
+
+// ─── Accident Blackspots (ML service → /ml/blackspots) ──────
+
+export async function getBlackspots(riskFilter = null) {
+  const params = riskFilter ? `?risk=${riskFilter}` : ''
+  return request(`${ML_BASE}/blackspots${params}`)
 }
 
 // ─── Admin Stats (Spring Boot /api/admin) ────────────────────
@@ -122,7 +156,72 @@ export async function getAdminStats() {
   return request(`${API_BASE}/admin/stats`)
 }
 
-export async function getHotspots() {
-  // /api/hazards returns all ACTIVE hazards from HazardController (public endpoint)
-  return request(`${API_BASE}/hazards`)
+// ─── Admin: Users ────────────────────────────────────────────
+
+export async function adminGetUsers() {
+  return request(`${API_BASE}/admin/users`)
+}
+
+export async function adminActivateUser(id) {
+  return request(`${API_BASE}/admin/users/${id}/activate`, { method: 'PUT' })
+}
+
+export async function adminDeactivateUser(id) {
+  return request(`${API_BASE}/admin/users/${id}/deactivate`, { method: 'PUT' })
+}
+
+export async function adminDeleteUser(id) {
+  return request(`${API_BASE}/admin/users/${id}`, { method: 'DELETE' })
+}
+
+// ─── Admin: Blackspots ───────────────────────────────────────
+
+export async function adminGetBlackspots() {
+  return request(`${API_BASE}/admin/blackspots`)
+}
+
+export async function adminAddBlackspot(data) {
+  return request(`${API_BASE}/admin/blackspots`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function adminUpdateBlackspot(id, data) {
+  return request(`${API_BASE}/admin/blackspots/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function adminDeleteBlackspot(id) {
+  return request(`${API_BASE}/admin/blackspots/${id}`, { method: 'DELETE' })
+}
+
+// ─── Admin: Hazards ──────────────────────────────────────────
+
+export async function adminGetHazards() {
+  return request(`${API_BASE}/admin/hazards`)
+}
+
+export async function adminAddHazard(data) {
+  return request(`${API_BASE}/admin/hazards`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function adminUpdateHazard(id, data) {
+  return request(`${API_BASE}/admin/hazards/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function adminDeleteHazard(id) {
+  return request(`${API_BASE}/admin/hazards/${id}`, { method: 'DELETE' })
+}
+
+export async function adminResolveHazard(id) {
+  return request(`${API_BASE}/admin/hazards/${id}/resolve`, { method: 'PUT' })
 }

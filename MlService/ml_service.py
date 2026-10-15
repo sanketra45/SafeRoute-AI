@@ -434,6 +434,86 @@ def _photon(query, n=8):
 
 
 # ─────────────────────────────────────────────────────────
+# GET /blackspots  — serve aggregated accident blackspot data from CSV
+# ─────────────────────────────────────────────────────────
+_blackspots_cache = None
+
+def _load_blackspots():
+    global _blackspots_cache
+    if _blackspots_cache is not None:
+        return _blackspots_cache
+
+    csv_path = BASE / "nagpur_accident_dataset.csv"
+    if not csv_path.exists():
+        _blackspots_cache = []
+        return _blackspots_cache
+
+    try:
+        df = pd.read_csv(csv_path)
+        df.columns = [c.strip().lower() for c in df.columns]
+
+        # Aggregate by location name
+        agg = df.groupby("location").agg(
+            lat=("latitude", "mean"),
+            lon=("longitude", "mean"),
+            total_accidents=("accident_count", "sum"),
+            avg_accidents=("accident_count", "mean"),
+            count=("id", "count"),
+            road_type=("road_type", lambda x: x.mode()[0] if len(x) > 0 else "Unknown"),
+        ).reset_index()
+
+        # Determine dominant risk per location
+        def dominant_risk(loc):
+            sub = df[df["location"] == loc]["risk_level"]
+            order = {"High": 3, "Medium": 2, "Low": 1}
+            return sub.map(order).fillna(0).idxmax() if len(sub) else 0
+
+        risk_map = {}
+        for loc, grp in df.groupby("location")["risk_level"]:
+            order = {"High": 3, "Medium": 2, "Low": 1}
+            scores = grp.map(order).fillna(0)
+            best_idx = scores.idxmax()
+            risk_map[loc] = df.loc[best_idx, "risk_level"]
+
+        results = []
+        for _, row in agg.iterrows():
+            loc = row["location"]
+            risk = risk_map.get(loc, "Medium")
+            rec_count = int(row["count"])
+            avg_acc = round(float(row["avg_accidents"]), 1)
+            results.append({
+                "id": loc.lower().replace(" ", "_"),
+                "location": loc,
+                "lat": round(float(row["lat"]), 5),
+                "lng": round(float(row["lon"]), 5),
+                "total_accidents": int(row["total_accidents"]),
+                "avg_accidents": avg_acc,
+                "records": rec_count,
+                "road_type": str(row["road_type"]),
+                "risk": risk.upper(),
+                "risk_level": risk,
+            })
+
+        # Sort by total accidents descending
+        results.sort(key=lambda x: x["total_accidents"], reverse=True)
+        _blackspots_cache = results
+        log.info("[BLACKSPOTS] Loaded %d unique locations from CSV", len(results))
+        return results
+    except Exception as e:
+        log.error("[BLACKSPOTS] Failed to load CSV: %s", e)
+        _blackspots_cache = []
+        return []
+
+@app.route("/blackspots", methods=["GET"])
+def get_blackspots():
+    data = _load_blackspots()
+    risk_filter = request.args.get("risk", "").upper()
+    if risk_filter in ("HIGH", "MEDIUM", "LOW"):
+        data = [d for d in data if d["risk"] == risk_filter]
+    return jsonify(data)
+
+
+# ─────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────
 if __name__ == "__main__":

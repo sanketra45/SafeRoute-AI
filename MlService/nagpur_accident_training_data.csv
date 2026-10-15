@@ -1,0 +1,21 @@
+id,location,latitude,longitude,time_of_day,weather,road_type,traffic_density,accident_count,risk_level
+1,Hingna T Point,21.09967,78.98012,18,Rain,Junction,High,58,High
+2,Wardha Road,21.09012,79.06018,17,Clear,Junction,High,54,High
+3,Chatrapati Square,21.12234,79.09428,12,Clear,Junction,High,52,High
+4,MIDC Hingna,21.09109,78.99955,11,Rain,Junction,Medium,49,High
+5,Sitabuldi Junction,21.14458,79.0893,16,Cloudy,Junction,High,47,High
+6,Nandanvan,21.12893,79.11995,13,Clear,City Road,High,43,High
+7,Pratap Nagar,21.11696,79.04968,10,Clear,Junction,High,41,High
+8,Dharampeth,21.12905,79.06849,15,Clear,Junction,Medium,38,Medium
+9,Mankapur,21.12068,79.04126,11,Clear,Junction,Medium,36,Medium
+10,Ravi Nagar,21.13538,79.05519,9,Clear,Junction,High,33,Medium
+11,Sadar,21.14966,79.08139,14,Clear,City Road,Medium,31,Medium
+12,Zero Mile,21.14596,79.08835,12,Haze,Highway,High,29,Medium
+13,Ambazari,21.12788,78.99032,8,Clear,Junction,Medium,26,Medium
+14,Nagpur Railway Stn,21.1467,79.08529,7,Clear,Junction,Medium,24,Low
+15,Beltarodi,21.07031,79.02982,16,Clear,Junction,Medium,22,Low
+16,Trimurti Nagar,21.14332,79.049,17,Fog,Ring Road,High,20,Low
+17,Civil Lines,21.15338,79.08749,10,Clear,Highway,Medium,18,Low
+18,Itwari,21.15762,79.10068,13,Clear,City Road,Medium,17,Low
+19,Butibori,20.96934,79.04832,22,Clear,City Road,Low,15,Low
+20,Koradi,21.2523,79.00148,19,Rain,Junction,Low,13,Low

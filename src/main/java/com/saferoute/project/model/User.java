@@ -30,9 +30,10 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
+    /** Account enabled/disabled by admin - defaults to true */
     @Column(nullable = false)
     @Builder.Default
-    private Integer drivingScore = 100;
+    private boolean active = true;
 
     @Column(nullable = false, updatable = false)
     @Builder.Default
@@ -42,11 +43,6 @@ public class User {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private List<ReportedHazard> hazards;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    @ToString.Exclude
-    @EqualsAndHashCode.Exclude
-    private List<ScoreEvent> scoreEvents;
 
     public enum Role {
         ROLE_USER, ROLE_ADMIN

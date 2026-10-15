@@ -6,7 +6,6 @@ import MainLayout from './components/MainLayout'
 import MapPage from './pages/MapPage'
 import NavigatePage from './pages/NavigatePage'
 import RiskAnalysisPage from './pages/RiskAnalysisPage'
-import LeaderboardPage from './pages/LeaderboardPage'
 import AdminPage from './pages/AdminPage'
 
 function AppInner() {
@@ -26,14 +25,14 @@ function AppInner() {
   }
 
   // Role-based page guard
-  const safeActivePage = activePage === 'admin' && user.role !== 'admin' ? 'map' : activePage
+  const isAdmin = user.role === 'admin'
+  const safeActivePage = activePage === 'admin' && !isAdmin ? 'map' : activePage
 
   const pageMap = {
     map: <MapPage />,
     navigate: <NavigatePage />,
     risk: <RiskAnalysisPage />,
-    leaderboard: <LeaderboardPage />,
-    admin: user.role === 'admin' ? <AdminPage /> : <MapPage />,
+    admin: isAdmin ? <AdminPage /> : <MapPage />,
   }
 
   return (
