@@ -50,11 +50,13 @@ public class MlService {
                     new HttpEntity<>(request, jsonHeaders()),
                     RouteResponse.class
             );
-            return response.getBody();
+            RouteResponse body = response.getBody();
+            if (body == null || (body.getSafeRoute() == null && body.getFastRoute() == null)) {
+                throw new IllegalStateException("Routing service returned no route geometry");
+            }
+            return body;
         } catch (Exception e) {
-            RouteResponse fallback = new RouteResponse();
-            fallback.setMessage("ML service unavailable: " + e.getMessage());
-            return fallback;
+            throw new IllegalStateException("Unable to calculate route: " + e.getMessage(), e);
         }
     }
 

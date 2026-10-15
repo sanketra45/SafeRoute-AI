@@ -29,7 +29,6 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
-
     private final CorsConfigurationSource corsConfigurationSource;
 
     @Bean
@@ -45,12 +44,22 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Public read for hazards (map display)
                         .requestMatchers(HttpMethod.GET, "/api/hazards").permitAll()
+                        // External service proxies
                         .requestMatchers("/api/weather", "/api/traffic").permitAll()
+                        // H2 console (dev only)
+                        .requestMatchers("/h2-console/**").permitAll()
                         // WebSocket handshake
                         .requestMatchers("/ws/**").permitAll()
-                        // Admin only
+
+                        // Admin-only paths - MUST be server-side enforced
                         .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
+                        // Hazard write/delete restricted to admin
+                        .requestMatchers(HttpMethod.POST, "/api/hazards").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/hazards/*/resolve").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/hazards/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/hazards/**").hasAuthority("ROLE_ADMIN")
                         // Everything else requires authentication
                         .anyRequest().authenticated()
                 )

@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -54,6 +55,7 @@ public class HazardController {
      * Admin only. Mark hazard as resolved.
      */
     @PutMapping("/{id}/resolve")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<HazardDto> resolve(@PathVariable Long id) {
         return ResponseEntity.ok(hazardService.resolveHazard(id));
     }

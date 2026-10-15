@@ -37,6 +37,7 @@ public class HazardService {
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .hazardType(ReportedHazard.HazardType.valueOf(request.getHazardType()))
+                .severity(request.getSeverity() == null ? "MEDIUM" : request.getSeverity())
                 .description(request.getDescription())
                 .reportedBy(user)
                 .build();
@@ -70,6 +71,7 @@ public class HazardService {
         dto.setLatitude(h.getLatitude());
         dto.setLongitude(h.getLongitude());
         dto.setHazardType(h.getHazardType().name());
+        dto.setSeverity(h.getSeverity());
         dto.setDescription(h.getDescription());
         dto.setReportedByName(h.getReportedBy() != null ? h.getReportedBy().getName() : null);
         dto.setUpvotes(h.getUpvotes());

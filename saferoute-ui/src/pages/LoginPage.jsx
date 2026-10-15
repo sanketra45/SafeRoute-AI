@@ -10,20 +10,22 @@ export default function LoginPage({ onLogin, onRegister }) {
   const [loading, setLoading] = useState(false)
   const [localError, setLocalError] = useState(null)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLocalError(null)
     clearError()
     if (!email.trim() || !password.trim()) { setLocalError('Please enter email and password.'); return }
     setLoading(true)
-    setTimeout(() => {
-      const ok = login(email.trim(), password)
+    try {
+      const ok = await login(email.trim(), password)
       if (ok) {
         onLogin()
       } else {
         setLoading(false)
       }
-    }, 600)
+    } catch {
+      setLoading(false)
+    }
   }
 
   const displayError = localError || error
@@ -71,12 +73,12 @@ export default function LoginPage({ onLogin, onRegister }) {
 
             <div className="auth-fcard fade-in-delay-3">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ fontSize: 11, letterSpacing: '1.5px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Driver Score</div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>94</div>
+                <div style={{ fontSize: 11, letterSpacing: '1.5px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Live Monitoring</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>24/7</div>
                 <div style={{ width: '60%', height: 3, background: 'var(--border)', borderRadius: 2, marginTop: 4 }}>
-                  <div style={{ width: '94%', height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+                  <div style={{ width: '100%', height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Excellent Performance</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Active Risk Coverage</div>
               </div>
             </div>
           </div>
@@ -95,14 +97,13 @@ export default function LoginPage({ onLogin, onRegister }) {
             <div className="auth-form-sub">Navigate Nagpur Safely with AI</div>
           </div>
 
-          {/* Demo hint */}
+          {/* Backend hint */}
           <div style={{
             background: 'rgba(0,229,160,0.06)', border: '1px solid rgba(0,229,160,0.2)',
             borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 11, color: 'var(--text-secondary)',
           }}>
-            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>Admin demo:</span>{' '}
-            admin@saferoute.in / Admin@123 &nbsp;|&nbsp;
-            <span style={{ color: 'var(--text-muted)' }}>Or register a new account below.</span>
+            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>Register</span> a new account,
+            or use your existing credentials. Admin access is configured server-side.
           </div>
 
           {displayError && (

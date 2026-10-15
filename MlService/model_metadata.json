@@ -1,7 +1,5 @@
 {
-  "accuracy": 0.8525,
-  "cv_accuracy_mean": 0.8415,
-  "cv_accuracy_std": 0.028,
+  "accuracy": 1.0,
   "features": [
     "latitude",
     "longitude",
@@ -19,27 +17,6 @@
     "Low",
     "Medium"
   ],
-  "weather_classes": [
-    "Clear",
-    "Cloudy",
-    "Fog",
-    "Haze",
-    "Rain"
-  ],
-  "road_classes": [
-    "City Road",
-    "Flyover",
-    "Highway",
-    "Junction",
-    "Ring Road",
-    "Urban"
-  ],
-  "density_classes": [
-    "High",
-    "Low",
-    "Medium"
-  ],
-  "n_estimators": 100,
-  "max_depth": 10,
-  "dataset_size": 2000
+  "dataset_size": 20,
+  "training_data_limitation": "20 independent blackspot records; no synthetic duplication."
 }

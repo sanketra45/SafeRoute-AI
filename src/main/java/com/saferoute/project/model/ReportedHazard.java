@@ -26,6 +26,10 @@ public class ReportedHazard {
     @Column(nullable = false)
     private HazardType hazardType;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private String severity = "MEDIUM";
+
     @Column(length = 500)
     private String description;
 

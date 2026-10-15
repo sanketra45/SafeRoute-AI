@@ -9,6 +9,7 @@ public class HazardDto {
     private Double latitude;
     private Double longitude;
     private String hazardType;
+    private String severity;
     private String description;
     private String reportedByName;
     private Integer upvotes;
