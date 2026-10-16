@@ -33,12 +33,12 @@ print("[...] Downloading from OpenStreetMap. Takes 1–3 min.\n")
 
 start = time.time()
 try:
-    G = ox.graph_from_place(
-        "Nagpur, Maharashtra, India",
-        network_type="drive",
-        retain_all=False,
-        simplify=True,
-    )
+    G = ox.graph_from_point(
+    (21.1458, 79.0882),
+    dist=8000,
+    network_type="drive",
+    simplify=True,
+)
     elapsed = time.time() - start
     print(f"[OK] Downloaded in {elapsed:.1f}s")
     print(f"     Nodes : {G.number_of_nodes():,}")
