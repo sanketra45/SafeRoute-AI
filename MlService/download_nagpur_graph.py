@@ -1,53 +1,49 @@
 """
 SafeRoute AI — Download Nagpur Road Network Graph
 ==================================================
-Run ONCE before starting ml_service.py.
-Downloads Nagpur road network from OpenStreetMap via OSMnx.
-
-Usage:  python download_nagpur_graph.py
-Output: data/nagpur_road_network.graphml
+Downloads a smaller road network around central Nagpur.
 """
-import os, time
 
-BASE      = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR  = os.path.join(BASE, "data")
+import os
+import time
+import osmnx as ox
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE, "data")
 SAVE_PATH = os.path.join(DATA_DIR, "nagpur_road_network.graphml")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
-if os.path.exists(SAVE_PATH):
-    mb = os.path.getsize(SAVE_PATH) / (1024*1024)
-    print(f"[OK] Graph already exists: {SAVE_PATH} ({mb:.1f} MB). Nothing to do.")
-    exit(0)
-
-try:
-    import osmnx as ox
-except ImportError:
-    print("[ERROR] osmnx not installed. Run:  pip install osmnx")
-    exit(1)
-
 print("=" * 55)
-print(" SafeRoute AI — Nagpur Road Network Download")
+print(" SafeRoute AI — Smaller Nagpur Road Network")
 print("=" * 55)
-print("[...] Downloading from OpenStreetMap. Takes 1–3 min.\n")
+
+# Download a smaller road network around central Nagpur
+print("[...] Downloading road network from OpenStreetMap...")
 
 start = time.time()
+
 try:
     G = ox.graph_from_point(
-    (21.1458, 79.0882),
-    dist=8000,
-    network_type="drive",
-    simplify=True,
-)
+        (21.1458, 79.0882),
+        dist=8000,
+        network_type="drive",
+        simplify=True,
+    )
+
     elapsed = time.time() - start
-    print(f"[OK] Downloaded in {elapsed:.1f}s")
-    print(f"     Nodes : {G.number_of_nodes():,}")
-    print(f"     Edges : {G.number_of_edges():,}")
-    print(f"[...] Saving to {SAVE_PATH} ...")
+
+    print(f"[OK] Downloaded in {elapsed:.1f} seconds")
+    print(f"     Nodes: {G.number_of_nodes():,}")
+    print(f"     Edges: {G.number_of_edges():,}")
+
+    print(f"[...] Saving to {SAVE_PATH}...")
     ox.save_graphml(G, SAVE_PATH)
-    mb = os.path.getsize(SAVE_PATH) / (1024*1024)
-    print(f"[OK] Saved ({mb:.1f} MB)")
-    print("\n[DONE] You can now start:  python ml_service.py")
+
+    mb = os.path.getsize(SAVE_PATH) / (1024 * 1024)
+
+    print(f"[OK] Graph saved: {mb:.2f} MB")
+    print("[DONE] New road graph generated successfully!")
+
 except Exception as e:
     print(f"[ERROR] {e}")
-    print("        Check internet connection and try again.")
