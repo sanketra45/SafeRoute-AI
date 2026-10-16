@@ -129,6 +129,7 @@ def load_graph(graphml_path=GRAPHML_PATH):
     try:
         import osmnx as ox
         G = ox.load_graphml(graphml_path)
+        G = nx.MultiDiGraph(G)
     except ImportError:
         G = nx.read_graphml(graphml_path)
     log.info("Graph: %d nodes, %d edges", G.number_of_nodes(), G.number_of_edges())
