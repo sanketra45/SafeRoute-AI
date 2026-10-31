@@ -23,7 +23,8 @@ public class AppConfig {
         return new RestTemplate();
     }
 
-    // CORS: allow React dev server to call Spring Boot
+    // CORS: explicit local and deployed frontend origins; credentials require
+    // concrete origins rather than a wildcard.
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
@@ -32,7 +33,13 @@ public class AppConfig {
                 .filter(origin -> !origin.isEmpty())
                 .toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        config.setAllowedHeaders(List.of("*"));
+        config.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Requested-With"
+        ));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
