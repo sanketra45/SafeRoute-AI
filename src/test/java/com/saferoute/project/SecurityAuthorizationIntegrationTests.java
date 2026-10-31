@@ -14,8 +14,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
@@ -107,6 +109,17 @@ class SecurityAuthorizationIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Admin\",\"email\":\"admin@example.com\",\"password\":\"password123\",\"secret\":\"anything\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deployedVercelOriginCanCompleteLoginPreflight() throws Exception {
+        mockMvc.perform(options("/api/auth/login")
+                        .header("Origin", "https://safe-route-ai-tau.vercel.app")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin",
+                        "https://safe-route-ai-tau.vercel.app"));
     }
 
     private String loginAs(User.Role role, String email) throws Exception {
