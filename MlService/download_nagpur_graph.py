@@ -1,7 +1,13 @@
 """
 SafeRoute AI — Download Nagpur Road Network Graph
 ==================================================
-Downloads a smaller road network around central Nagpur.
+Downloads the FULL Nagpur city road network (no radius limit).
+
+NOTE: For production/Render deployment, use the tile-based approach instead:
+  python generate_tiles.py
+
+This script downloads a single monolithic graph (useful for local dev only).
+The full graph may exceed Render's free-tier memory (512 MB).
 """
 
 import os
@@ -15,18 +21,18 @@ SAVE_PATH = os.path.join(DATA_DIR, "nagpur_road_network.graphml")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 print("=" * 55)
-print(" SafeRoute AI — Smaller Nagpur Road Network")
+print(" SafeRoute AI — Full Nagpur Road Network")
 print("=" * 55)
 
-# Download a smaller road network around central Nagpur
-print("[...] Downloading road network from OpenStreetMap...")
+# Download the FULL Nagpur city road network (no radius limit)
+print("[...] Downloading full Nagpur road network from OpenStreetMap...")
+print("      This may take a few minutes for the complete city graph.")
 
 start = time.time()
 
 try:
-    G = ox.graph_from_point(
-        (21.1458, 79.0882),
-        dist=8000,
+    G = ox.graph_from_place(
+        "Nagpur, Maharashtra, India",
         network_type="drive",
         simplify=True,
     )
