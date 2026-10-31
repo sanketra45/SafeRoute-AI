@@ -78,37 +78,35 @@ def load_model():
 load_model()
 
 # ─────────────────────────────────────────────────────────
-# GRAPH LOADING (lazy, background)
+# TILE-BASED ROUTING SETUP
 # ─────────────────────────────────────────────────────────
-_router_graph = None
-_graph_loading = False
-_graph_error   = None
+# We no longer load the entire Nagpur graph at startup.
+# Instead, tile_router.py loads only the tiles needed for
+# each routing request, keeping memory usage bounded.
 
-def _load_graph_bg():
-    global _router_graph, _graph_loading, _graph_error
-    _graph_loading = True
-    try:
-        from risk_router import load_graph
-        log.info("[ROUTER] Loading Nagpur road network ...")
-        _router_graph = load_graph()
-        log.info("[ROUTER] Ready: %d nodes, %d edges",
-                 _router_graph.number_of_nodes(),
-                 _router_graph.number_of_edges())
-        _graph_error = None
-    except FileNotFoundError as e:
-        _graph_error = str(e)
-        log.error("[ROUTER] GraphML missing: %s", e)
-        log.error("         Run: python download_nagpur_graph.py")
-    except Exception as e:
-        _graph_error = str(e)
-        log.error("[ROUTER] Load failed: %s", e)
-    finally:
-        _graph_loading = False
+try:
+    from tile_router import (
+        compare_routes_tile, get_tile_cache,
+        tiles_available, TILES_DIR, GRID_ROWS, GRID_COLS
+    )
+    TILE_ROUTER_AVAILABLE = True
+    log.info("[ROUTER] Tile-based router loaded. Tiles dir: %s", TILES_DIR)
+    if tiles_available():
+        log.info("[ROUTER] Tile files found — lazy loading enabled.")
+    else:
+        log.warning("[ROUTER] No tile files found in %s. Run: python generate_tiles.py", TILES_DIR)
+except Exception as _tile_err:
+    TILE_ROUTER_AVAILABLE = False
+    log.error("[ROUTER] tile_router import failed: %s", _tile_err)
 
-threading.Thread(target=_load_graph_bg, daemon=True).start()
+# Legacy single-graph fallback (kept for reference / local dev)
+_legacy_graph = None
+_legacy_loading = False
+_legacy_error   = None
 
 def _get_graph():
-    return _router_graph
+    """Returns the legacy single graph if it exists (for local dev), else None."""
+    return _legacy_graph
 
 # ─────────────────────────────────────────────────────────
 # LABEL NORMALISATION MAPS
@@ -165,16 +163,26 @@ def _safe_encode(encoder, value, fallback, field_name):
 # ─────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
-    G = _get_graph()
+    tile_info = {}
+    if TILE_ROUTER_AVAILABLE:
+        try:
+            cache = get_tile_cache()
+            tile_info = {
+                "tiles_available": tiles_available(),
+                "tiles_dir": TILES_DIR,
+                "grid": f"{GRID_ROWS}x{GRID_COLS}",
+                "cached_tiles": len(cache.cache_info()),
+                "cached_tile_ids": list(cache.cache_info().keys()),
+            }
+        except Exception as e:
+            tile_info = {"error": str(e)}
+
     return jsonify({
-        "status":        "ok",
-        "model_loaded":  MODEL_LOADED,
-        "model_accuracy": MODEL_META.get("accuracy", 0),
-        "graph_loaded":  G is not None,
-        "graph_loading": _graph_loading,
-        "graph_error":   _graph_error,
-        "graph_nodes":   G.number_of_nodes() if G else 0,
-        "graph_edges":   G.number_of_edges() if G else 0,
+        "status":             "ok",
+        "model_loaded":       MODEL_LOADED,
+        "model_accuracy":     MODEL_META.get("accuracy", 0),
+        "tile_router":        TILE_ROUTER_AVAILABLE,
+        "tile_info":          tile_info,
         "encoder_classes": {
             "weather":  list(le_weather.classes_) if MODEL_LOADED else [],
             "road":     list(le_road.classes_)    if MODEL_LOADED else [],
@@ -327,23 +335,36 @@ def safe_route():
     except (KeyError, ValueError, TypeError):
         return jsonify({"error": "originLat, originLon, destLat, destLon are required numeric fields"}), 400
 
-    G = _get_graph()
-    if G is None:
-        return jsonify({
-            "error":        "Road network graph not yet loaded. Retry in a few seconds.",
-            "graphLoading": _graph_loading,
-            "graphError":   _graph_error,
-        }), 503
-
-    try:
-        from risk_router import compare_routes
-        result = compare_routes(G, origin_lat, origin_lon, dest_lat, dest_lon, {
-            "traffic": data.get("traffic"),
-            "weather": data.get("weather"),
-        })
-    except Exception as e:
-        log.exception("Routing error")
-        return jsonify({"error": f"Routing failed: {e}"}), 500
+    # ── Try tile-based routing first ────────────────────────
+    if TILE_ROUTER_AVAILABLE and tiles_available():
+        try:
+            result = compare_routes_tile(
+                origin_lat, origin_lon, dest_lat, dest_lon,
+                live_conditions={
+                    "traffic": data.get("traffic"),
+                    "weather": data.get("weather"),
+                }
+            )
+        except Exception as e:
+            log.exception("Tile routing error")
+            return jsonify({"error": f"Tile routing failed: {e}"}), 500
+    else:
+        # ── Legacy single-graph fallback ─────────────────────
+        G = _get_graph()
+        if G is None:
+            return jsonify({
+                "error":        "Road network not available. Run generate_tiles.py to create tile files.",
+                "tileRouter":   TILE_ROUTER_AVAILABLE,
+            }), 503
+        try:
+            from risk_router import compare_routes
+            result = compare_routes(G, origin_lat, origin_lon, dest_lat, dest_lon, {
+                "traffic": data.get("traffic"),
+                "weather": data.get("weather"),
+            })
+        except Exception as e:
+            log.exception("Legacy routing error")
+            return jsonify({"error": f"Routing failed: {e}"}), 500
 
     safe   = result.get("safe_route", {})
     fast   = result.get("short_route", {})
@@ -354,7 +375,6 @@ def safe_route():
     if not fast.get("success"):
         return jsonify({"error": fast.get("error", "Fast route not found")}), 422
 
-    # Convert [[lat,lon],...] → [{"lat":..,"lon":..},...]  (Spring Boot Coordinate DTO)
     def to_coords(lst):
         return [{"lat": c[0], "lon": c[1]} for c in lst]
 
@@ -511,6 +531,50 @@ def get_blackspots():
     if risk_filter in ("HIGH", "MEDIUM", "LOW"):
         data = [d for d in data if d["risk"] == risk_filter]
     return jsonify(data)
+
+
+# ─────────────────────────────────────────────────────────
+# GET /tiles/status  — Tile cache debug endpoint
+# ─────────────────────────────────────────────────────────
+@app.route("/tiles/status", methods=["GET"])
+def tiles_status():
+    if not TILE_ROUTER_AVAILABLE:
+        return jsonify({"error": "Tile router not available"}), 503
+    try:
+        import os as _os
+        from tile_router import (
+            TILES_DIR as _td, GRID_ROWS as _gr, GRID_COLS as _gc,
+            get_tile_id, tile_graphml_path
+        )
+        cache = get_tile_cache()
+        cached = cache.cache_info()
+
+        tile_files = {}
+        total_mb   = 0.0
+        for r in range(_gr):
+            for c in range(_gc):
+                tid  = get_tile_id(r, c)
+                path = tile_graphml_path(r, c)
+                exists = _os.path.exists(path)
+                size_mb = _os.path.getsize(path) / (1024 * 1024) if exists else 0.0
+                total_mb += size_mb
+                tile_files[tid] = {
+                    "exists":    exists,
+                    "size_mb":   round(size_mb, 2),
+                    "in_cache":  tid in cached,
+                }
+
+        return jsonify({
+            "tiles_dir":     _td,
+            "grid":          f"{_gr}x{_gc}",
+            "total_files":   sum(1 for v in tile_files.values() if v["exists"]),
+            "total_mb":      round(total_mb, 1),
+            "cached_tiles":  len(cached),
+            "cached_detail": cached,
+            "tile_files":    tile_files,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ─────────────────────────────────────────────────────────

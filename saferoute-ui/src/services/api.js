@@ -1,10 +1,13 @@
 /**
  * SafeRoute AI — API Service
- * /api/* → Spring Boot (port 8080) via Vite proxy
+ * /api/* → Spring Boot (port 8080) via Vite proxy in development
  * /ml/*  → Python ML service (port 5001) via Vite proxy
  */
 
-const API_BASE = '/api'
+// Vite's proxy exists only while `vite` is running locally.  Production builds
+// must receive the public backend API URL (for example https://api.example.com/api).
+// Keeping /api as the fallback preserves local development with vite.config.js.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 const ML_BASE  = '/ml'
 
 // ─── Helpers ──────────────────────────────────────────────
