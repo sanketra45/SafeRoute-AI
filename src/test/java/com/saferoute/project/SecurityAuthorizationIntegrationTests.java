@@ -13,6 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -20,6 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.hamcrest.Matchers.containsString;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:saferoute-test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL",
@@ -112,14 +115,32 @@ class SecurityAuthorizationIntegrationTests {
     }
 
     @Test
-    void deployedVercelOriginCanCompleteLoginPreflight() throws Exception {
-        mockMvc.perform(options("/api/auth/login")
-                        .header("Origin", "https://safe-route-ai-tau.vercel.app")
-                        .header("Access-Control-Request-Method", "POST")
-                        .header("Access-Control-Request-Headers", "content-type"))
+    void deployedVercelOriginsCanCompleteLoginPreflight() throws Exception {
+        for (String origin : List.of(
+                "https://safe-route-ai-tau.vercel.app",
+                "https://safe-route-ar0clsy4k-sanket-rathods-projects-3cbc9c96.vercel.app"
+        )) {
+            mockMvc.perform(options("/api/auth/login")
+                            .header("Origin", origin)
+                            .header("Access-Control-Request-Method", "POST")
+                            .header("Access-Control-Request-Headers", "content-type,authorization"))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Access-Control-Allow-Origin", origin))
+                    .andExpect(header().string("Access-Control-Allow-Methods", containsString("POST")))
+                    .andExpect(header().string("Access-Control-Allow-Headers", containsString("content-type")))
+                    .andExpect(header().string("Access-Control-Allow-Headers", containsString("authorization")));
+        }
+    }
+
+    @Test
+    void registrationEndpointIsPublicAndReachable() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"New User","email":"new-user@example.com","password":"password123"}
+                                """))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Access-Control-Allow-Origin",
-                        "https://safe-route-ai-tau.vercel.app"));
+                .andExpect(jsonPath("$.userId").isNumber());
     }
 
     private String loginAs(User.Role role, String email) throws Exception {
