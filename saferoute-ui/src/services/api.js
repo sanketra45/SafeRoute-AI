@@ -4,10 +4,13 @@
  * /ml/*  → Python ML service (port 5001) via Vite proxy
  */
 
-// Vite's proxy exists only while `vite` is running locally.  Production builds
-// must receive the public backend API URL (for example https://api.example.com/api).
-// Keeping /api as the fallback preserves local development with vite.config.js.
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+// Vite's proxy exists only while `vite` is running locally. Production builds
+// receive the backend origin and add Spring Boot's /api prefix exactly once.
+// Without the variable, keep the local Vite /api proxy behavior.
+const configuredBackendUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
+const API_BASE = configuredBackendUrl
+  ? `${configuredBackendUrl.replace(/\/api$/, '')}/api`
+  : '/api'
 // Same production rule for Flask routes: Vite only proxies /ml during local development.
 const ML_BASE = (import.meta.env.VITE_ML_BASE_URL || '/ml').replace(/\/$/, '')
 
