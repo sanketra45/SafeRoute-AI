@@ -4,15 +4,30 @@
  * /ml/*  → Python ML service (port 5001) via Vite proxy
  */
 
-// Vite's proxy exists only while `vite` is running locally. Production builds
-// receive the backend origin and add Spring Boot's /api prefix exactly once.
-// Without the variable, keep the local Vite /api proxy behavior.
+// Production builds must receive the backend origin and add Spring Boot's /api
+// prefix exactly once. Never fall back to a relative URL in production: that
+// would send requests to the Vercel host instead of the Spring Boot service.
 const configuredBackendUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
 const API_BASE = configuredBackendUrl
   ? `${configuredBackendUrl.replace(/\/api$/, '')}/api`
-  : '/api'
-// Same production rule for Flask routes: Vite only proxies /ml during local development.
-const ML_BASE = (import.meta.env.VITE_ML_BASE_URL || '/ml').replace(/\/$/, '')
+  : import.meta.env.DEV ? 'http://localhost:8080/api' : null
+// Apply the same rule to the separately deployed Flask ML service.
+const configuredMlUrl = import.meta.env.VITE_ML_BASE_URL?.replace(/\/$/, '')
+const ML_BASE = configuredMlUrl || (import.meta.env.DEV ? 'http://localhost:5001' : null)
+
+function springApiUrl(path) {
+  if (!API_BASE) {
+    throw new Error('Missing VITE_API_BASE_URL. Configure the deployed Spring Boot backend URL before building for production.')
+  }
+  return `${API_BASE}${path}`
+}
+
+function mlApiUrl(path) {
+  if (!ML_BASE) {
+    throw new Error('Missing VITE_ML_BASE_URL. Configure the deployed ML service URL before building for production.')
+  }
+  return `${ML_BASE}${path}`
+}
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -59,7 +74,7 @@ async function request(url, options = {}) {
 // ─── Auth (Spring Boot /api/auth) ──────────────────────────
 
 export async function login(email, password) {
-  const data = await request(`${API_BASE}/auth/login`, {
+  const data = await request(springApiUrl('/auth/login'), {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   })
@@ -68,7 +83,7 @@ export async function login(email, password) {
 }
 
 export async function register({ name, email, password }) {
-  return request(`${API_BASE}/auth/register`, {
+  return request(springApiUrl('/auth/register'), {
     method: 'POST',
     body: JSON.stringify({ name, email, password }),
   })
@@ -81,7 +96,7 @@ export function logout() {
 // ─── Risk Prediction (ML service → /ml/predict-risk) ───────
 
 export async function predictRisk(params) {
-  return request(`${ML_BASE}/predict-risk`, {
+  return request(mlApiUrl('/predict-risk'), {
     method: 'POST',
     body: JSON.stringify(params),
   })
@@ -90,7 +105,7 @@ export async function predictRisk(params) {
 // ─── Route Planning (ML service → /ml/safe-route) ──────────
 
 export async function getSafeRoute(params) {
-  return request(`${ML_BASE}/safe-route`, {
+  return request(mlApiUrl('/safe-route'), {
     method: 'POST',
     body: JSON.stringify(params),
   })
@@ -128,23 +143,23 @@ export async function getOsrmRoute(fromLat, fromLng, toLat, toLng) {
 
 export async function geocode(query, limit = 8) {
   const params = new URLSearchParams({ q: query, limit })
-  return request(`${ML_BASE}/geocode?${params}`)
+  return request(mlApiUrl(`/geocode?${params}`))
 }
 
 // ─── ML Health Check ────────────────────────────────────────
 
 export async function mlHealth() {
-  return request(`${ML_BASE}/health`)
+  return request(mlApiUrl('/health'))
 }
 
 // ─── Hazards (Spring Boot /api/hazards) ─────────────────────
 
 export async function getHotspots() {
-  return request(`${API_BASE}/hazards`)
+  return request(springApiUrl('/hazards'))
 }
 
 export async function reportHazard({ latitude, longitude, hazardType, severity, description }) {
-  return request(`${API_BASE}/hazards`, {
+  return request(springApiUrl('/hazards'), {
     method: 'POST',
     body: JSON.stringify({ latitude, longitude, hazardType, severity, description }),
   })
@@ -154,81 +169,81 @@ export async function reportHazard({ latitude, longitude, hazardType, severity, 
 
 export async function getBlackspots(riskFilter = null) {
   const params = riskFilter ? `?risk=${riskFilter}` : ''
-  return request(`${ML_BASE}/blackspots${params}`)
+  return request(mlApiUrl(`/blackspots${params}`))
 }
 
 // ─── Admin Stats (Spring Boot /api/admin) ────────────────────
 
 export async function getAdminStats() {
-  return request(`${API_BASE}/admin/stats`)
+  return request(springApiUrl('/admin/stats'))
 }
 
 // ─── Admin: Users ────────────────────────────────────────────
 
 export async function adminGetUsers() {
-  return request(`${API_BASE}/admin/users`)
+  return request(springApiUrl('/admin/users'))
 }
 
 export async function adminActivateUser(id) {
-  return request(`${API_BASE}/admin/users/${id}/activate`, { method: 'PUT' })
+  return request(springApiUrl(`/admin/users/${id}/activate`), { method: 'PUT' })
 }
 
 export async function adminDeactivateUser(id) {
-  return request(`${API_BASE}/admin/users/${id}/deactivate`, { method: 'PUT' })
+  return request(springApiUrl(`/admin/users/${id}/deactivate`), { method: 'PUT' })
 }
 
 export async function adminDeleteUser(id) {
-  return request(`${API_BASE}/admin/users/${id}`, { method: 'DELETE' })
+  return request(springApiUrl(`/admin/users/${id}`), { method: 'DELETE' })
 }
 
 // ─── Admin: Blackspots ───────────────────────────────────────
 
 export async function adminGetBlackspots() {
-  return request(`${API_BASE}/admin/blackspots`)
+  return request(springApiUrl('/admin/blackspots'))
 }
 
 export async function adminAddBlackspot(data) {
-  return request(`${API_BASE}/admin/blackspots`, {
+  return request(springApiUrl('/admin/blackspots'), {
     method: 'POST',
     body: JSON.stringify(data),
   })
 }
 
 export async function adminUpdateBlackspot(id, data) {
-  return request(`${API_BASE}/admin/blackspots/${id}`, {
+  return request(springApiUrl(`/admin/blackspots/${id}`), {
     method: 'PUT',
     body: JSON.stringify(data),
   })
 }
 
 export async function adminDeleteBlackspot(id) {
-  return request(`${API_BASE}/admin/blackspots/${id}`, { method: 'DELETE' })
+  return request(springApiUrl(`/admin/blackspots/${id}`), { method: 'DELETE' })
 }
 
 // ─── Admin: Hazards ──────────────────────────────────────────
 
 export async function adminGetHazards() {
-  return request(`${API_BASE}/admin/hazards`)
+  return request(springApiUrl('/admin/hazards'))
 }
 
 export async function adminAddHazard(data) {
-  return request(`${API_BASE}/admin/hazards`, {
+  return request(springApiUrl('/admin/hazards'), {
     method: 'POST',
     body: JSON.stringify(data),
   })
 }
 
 export async function adminUpdateHazard(id, data) {
-  return request(`${API_BASE}/admin/hazards/${id}`, {
+  return request(springApiUrl(`/admin/hazards/${id}`), {
     method: 'PUT',
     body: JSON.stringify(data),
   })
 }
 
 export async function adminDeleteHazard(id) {
-  return request(`${API_BASE}/admin/hazards/${id}`, { method: 'DELETE' })
+  return request(springApiUrl(`/admin/hazards/${id}`), { method: 'DELETE' })
 }
 
 export async function adminResolveHazard(id) {
-  return request(`${API_BASE}/admin/hazards/${id}/resolve`, { method: 'PUT' })
+  return request(springApiUrl(`/admin/hazards/${id}/resolve`), { method: 'PUT' })
 }
