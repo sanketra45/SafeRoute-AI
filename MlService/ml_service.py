@@ -41,7 +41,11 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:5173", "http://localhost:8080", "http://localhost:3000"])
+allowed_origins = os.getenv(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:8080,http://localhost:3000",
+)
+CORS(app, origins=[origin.strip() for origin in allowed_origins.split(",") if origin.strip()])
 
 BASE = pathlib.Path(__file__).parent
 

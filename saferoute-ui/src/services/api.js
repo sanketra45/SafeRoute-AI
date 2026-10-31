@@ -8,7 +8,8 @@
 // must receive the public backend API URL (for example https://api.example.com/api).
 // Keeping /api as the fallback preserves local development with vite.config.js.
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
-const ML_BASE  = '/ml'
+// Same production rule for Flask routes: Vite only proxies /ml during local development.
+const ML_BASE = (import.meta.env.VITE_ML_BASE_URL || '/ml').replace(/\/$/, '')
 
 // ─── Helpers ──────────────────────────────────────────────
 
