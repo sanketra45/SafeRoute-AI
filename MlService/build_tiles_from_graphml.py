@@ -163,13 +163,20 @@ def build_tiles(overwrite=False):
             path = tile_graphml_path(row, col)
             count = counts[tile_id]
             result = validation["tiles"][tile_id]
-            if not result["valid"]:
-                invalid.append(f"{tile_id} ({result['error']})")
-            elif count["nodes"] == 0 or count["edges"] == 0:
-                invalid.append(f"{tile_id} ({count['nodes']} nodes, {count['edges']} edges)")
+            size_mb = os.path.getsize(path) / 1_048_576 if os.path.isfile(path) else 0
+            usable = (result["valid"] and result["nodes"] > 0 and result["edges"] > 0
+                      and count["nodes"] > 0 and count["edges"] > 0)
+            if usable:
+                log.info("[TILE] %s VALID nodes=%d edges=%d size=%.1f MB",
+                         tile_id, result["nodes"], result["edges"], size_mb)
             else:
-                log.info("[SAVED] %s: %d nodes, %d edges, %.1f MB", tile_id,
-                         count["nodes"], count["edges"], os.path.getsize(path) / 1_048_576)
+                detail = result["error"] or (
+                    f"generated {count['nodes']} nodes/{count['edges']} edges; "
+                    f"validated {result['nodes']} nodes/{result['edges']} edges"
+                )
+                invalid.append(f"{tile_id} ({detail})")
+                log.error("[TILE] %s INVALID nodes=%d edges=%d size=%.1f MB: %s",
+                          tile_id, result["nodes"], result["edges"], size_mb, detail)
 
     missing = missing_tile_ids()
     if missing:
