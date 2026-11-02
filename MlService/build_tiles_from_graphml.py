@@ -23,7 +23,8 @@ NS = "{" + GRAPHML_NS + "}"
 sys.path.insert(0, BASE_DIR)
 from tile_router import (  # noqa: E402
     GRID_COLS, GRID_ROWS, get_tile_id, missing_tile_ids,
-    tile_bbox_with_overlap, tile_graphml_path, tiles_available,
+    tile_bbox_with_overlap, tile_graphml_path, tile_validation_status,
+    tiles_available,
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -92,6 +93,23 @@ def _node_coordinates(node, key_names):
         return None
 
 
+def _iter_graph_elements(target_tag):
+    """Yield matching top-level GraphML elements while pruning parsed XML."""
+    stack = []
+    graph_children = {NS + "node", NS + "edge", NS + "key"}
+    for event, elem in ET.iterparse(GRAPHML_PATH, events=("start", "end")):
+        if event == "start":
+            stack.append(elem)
+            continue
+        if elem.tag in graph_children and len(stack) >= 2:
+            if elem.tag == target_tag:
+                yield elem
+            parent = stack[-2]
+            parent.remove(elem)
+            elem.clear()
+        stack.pop()
+
+
 def build_tiles(overwrite=False):
     if not os.path.isfile(GRAPHML_PATH):
         raise FileNotFoundError(f"Source GraphML not found: {GRAPHML_PATH}")
@@ -112,9 +130,7 @@ def build_tiles(overwrite=False):
 
     try:
         # Pass 1 retains only node-id -> tile ids. XML is written and discarded.
-        for _, elem in ET.iterparse(GRAPHML_PATH, events=("end",)):
-            if elem.tag != NS + "node":
-                continue
+        for elem in _iter_graph_elements(NS + "node"):
             coordinates = _node_coordinates(elem, key_names)
             if coordinates:
                 tile_ids = _tile_ids_for_coordinate(*coordinates)
@@ -125,12 +141,9 @@ def build_tiles(overwrite=False):
                     for tile_id in tile_ids:
                         writers[tile_id].write(node_xml + "\n")
                         counts[tile_id]["nodes"] += 1
-            elem.clear()
 
         # Pass 2 writes an edge only where both endpoint nodes are present.
-        for _, elem in ET.iterparse(GRAPHML_PATH, events=("end",)):
-            if elem.tag != NS + "edge":
-                continue
+        for elem in _iter_graph_elements(NS + "edge"):
             source_tiles = node_tiles.get(elem.attrib.get("source"), ())
             target_tiles = node_tiles.get(elem.attrib.get("target"), ())
             shared_tiles = set(source_tiles).intersection(target_tiles)
@@ -139,22 +152,20 @@ def build_tiles(overwrite=False):
                 for tile_id in shared_tiles:
                     writers[tile_id].write(edge_xml + "\n")
                     counts[tile_id]["edges"] += 1
-            elem.clear()
     finally:
         _close_tile_writers(writers)
 
     invalid = []
+    validation = tile_validation_status()
     for row in range(GRID_ROWS):
         for col in range(GRID_COLS):
             tile_id = get_tile_id(row, col)
             path = tile_graphml_path(row, col)
             count = counts[tile_id]
-            try:
-                ET.parse(path)
-            except ET.ParseError as error:
-                invalid.append(f"{tile_id} (invalid XML: {error})")
-                continue
-            if count["nodes"] == 0 or count["edges"] == 0:
+            result = validation["tiles"][tile_id]
+            if not result["valid"]:
+                invalid.append(f"{tile_id} ({result['error']})")
+            elif count["nodes"] == 0 or count["edges"] == 0:
                 invalid.append(f"{tile_id} ({count['nodes']} nodes, {count['edges']} edges)")
             else:
                 log.info("[SAVED] %s: %d nodes, %d edges, %.1f MB", tile_id,
