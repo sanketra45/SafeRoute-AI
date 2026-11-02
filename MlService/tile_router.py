@@ -38,18 +38,19 @@ TILES_DIR     = os.path.join(BASE_DIR, "data", "tiles")
 DATASET_PATH  = os.path.join(BASE_DIR, "nagpur_accident_dataset.csv")
 
 # ── Nagpur Bounding Box ──────────────────────────────────────────
-# Roughly covers the full Nagpur metropolitan area
+# The committed road graph covers this area; keeping the grid aligned to it
+# ensures each of the 16 generated tiles contains routable roads.
 NAGPUR_BBOX = {
-    "lat_min": 20.85,
-    "lat_max": 21.45,
-    "lon_min": 78.85,
-    "lon_max": 79.35,
+    "lat_min": 21.06,
+    "lat_max": 21.23,
+    "lon_min": 79.00,
+    "lon_max": 79.18,
 }
 
 # ── Tile Grid Config ─────────────────────────────────────────────
 GRID_ROWS    = 4          # 4 rows × 4 cols = 16 tiles
 GRID_COLS    = 4
-OVERLAP_DEG  = 0.025      # ~2.5 km overlap on each border to ensure connectivity
+OVERLAP_DEG  = 0.005      # ~0.5 km overlap on each border to ensure connectivity
 MAX_TILES    = 6          # Maximum tiles kept in RAM simultaneously
 RISK_PENALTY = 500
 
@@ -262,9 +263,9 @@ def required_tile_paths() -> Dict[str, str]:
 
 
 def missing_tile_ids() -> List[str]:
-    """Return every required tile that is absent from the deployment."""
+    """Return every required tile that is absent or empty in the deployment."""
     return [tile_id for tile_id, path in required_tile_paths().items()
-            if not os.path.isfile(path)]
+            if not os.path.isfile(path) or os.path.getsize(path) == 0]
 
 
 def tiles_available() -> bool:
@@ -297,8 +298,8 @@ class TileCache:
 
     def _load_tile(self, row: int, col: int) -> Optional[nx.MultiDiGraph]:
         path = tile_graphml_path(row, col)
-        if not os.path.exists(path):
-            log.warning("[TILE] File missing: %s", path)
+        if not os.path.isfile(path) or os.path.getsize(path) == 0:
+            log.warning("[TILE] File missing or empty: %s", path)
             return None
         t0 = time.time()
         try:

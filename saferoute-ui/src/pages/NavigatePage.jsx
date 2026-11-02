@@ -335,6 +335,8 @@ export default function NavigatePage() {
   const [locating, setLocating] = useState(false)
   const [hotspots, setHotspots] = useState([])
   const [blackspots, setBlackspots] = useState([])
+  const [blackspotsLoading, setBlackspotsLoading] = useState(true)
+  const [blackspotsError, setBlackspotsError] = useState(null)
   const [showBlackspots, setShowBlackspots] = useState(true)
   const [navPanSignal, setNavPanSignal] = useState(null)
   const watchRef = useRef(null)
@@ -348,8 +350,9 @@ export default function NavigatePage() {
       .then(setMlStatus)
       .catch(() => setMlStatus({ serviceReachable: false, routingReady: false }))
     getBlackspots()
-      .then(data => setBlackspots(Array.isArray(data) ? data : []))
-      .catch(() => setBlackspots([]))
+      .then(setBlackspots)
+      .catch(error => setBlackspotsError(error.message || 'Unable to load blackspots'))
+      .finally(() => setBlackspotsLoading(false))
   }, [])
 
   const nearbyHazards = useProximityAlerts(userPos, hotspots, 500)
@@ -557,7 +560,11 @@ export default function NavigatePage() {
               transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 5,
             }}
           >
-            ● Blackspots ({blackspots.length})
+            ● {blackspotsLoading
+              ? 'Blackspots (loading…)'
+              : blackspotsError
+                ? 'Blackspots unavailable'
+                : `Blackspots (${blackspots.length})`}
           </button>
           <div className="pulse-dot" style={{ background: mlStatus?.routingReady ? '#00e5a0' : '#ff9500' }} />
           <span style={{ fontSize: 11, color: mlStatus?.routingReady ? 'var(--accent)' : '#ff9500' }}>

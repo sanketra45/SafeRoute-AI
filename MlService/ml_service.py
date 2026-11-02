@@ -651,7 +651,7 @@ def tiles_status():
             for c in range(_gc):
                 tid  = get_tile_id(r, c)
                 path = tile_graphml_path(r, c)
-                exists = _os.path.exists(path)
+                exists = _os.path.isfile(path) and _os.path.getsize(path) > 0
                 size_mb = _os.path.getsize(path) / (1024 * 1024) if exists else 0.0
                 total_mb += size_mb
                 tile_files[tid] = {

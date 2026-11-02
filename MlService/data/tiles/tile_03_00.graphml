@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d24" for="edge" attr.name="width" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d23" for="edge" attr.name="tunnel" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d22" for="edge" attr.name="junction" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d21" for="edge" attr.name="maxspeed" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d20" for="edge" attr.name="access" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d19" for="edge" attr.name="geometry" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d18" for="edge" attr.name="bridge" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d17" for="edge" attr.name="lanes" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d16" for="edge" attr.name="ref" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d15" for="edge" attr.name="name" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d14" for="edge" attr.name="length" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d13" for="edge" attr.name="reversed" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d12" for="edge" attr.name="oneway" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d11" for="edge" attr.name="highway" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d10" for="edge" attr.name="osmid" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d9" for="node" attr.name="railway" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d8" for="node" attr.name="highway" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d7" for="node" attr.name="junction" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d6" for="node" attr.name="street_count" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d5" for="node" attr.name="x" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d4" for="node" attr.name="y" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d3" for="graph" attr.name="simplified" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d2" for="graph" attr.name="crs" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d1" for="graph" attr.name="created_with" attr.type="string" />
+<ns0:key xmlns:ns0="http://graphml.graphdrawing.org/xmlns" id="d0" for="graph" attr.name="created_date" attr.type="string" />
+<graph edgedefault="directed">
+</graph>
+</graphml>

@@ -1,6 +1,9 @@
+import tempfile
 import unittest
+from unittest.mock import patch
 
 import ml_service
+import tile_router
 
 
 class MlServiceEndpointTests(unittest.TestCase):
@@ -23,22 +26,55 @@ class MlServiceEndpointTests(unittest.TestCase):
         self.assertTrue(all(record['risk'] == 'HIGH' for record in response.get_json()))
 
     def test_blackspots_allows_the_deployed_frontend_origin(self):
+        origin = 'https://safe-route-ai-tau.vercel.app'
+        response = self.client.get('/blackspots', headers={'Origin': origin})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get('Access-Control-Allow-Origin'), origin)
+
         response = self.client.options('/blackspots', headers={
-            'Origin': 'https://safe-route-ai-tau.vercel.app',
+            'Origin': origin,
             'Access-Control-Request-Method': 'GET',
             'Access-Control-Request-Headers': 'content-type',
         })
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.headers.get('Access-Control-Allow-Origin'),
-                         'https://safe-route-ai-tau.vercel.app')
+        self.assertEqual(response.headers.get('Access-Control-Allow-Origin'), origin)
 
     def test_health_exposes_routing_readiness(self):
-        response = self.client.get('/health')
-        self.assertEqual(response.status_code, 200)
-        health = response.get_json()
-        self.assertEqual(health['status'], 'ok')
-        self.assertIn('routing_ready', health)
-        self.assertIn('tiles_available', health['tile_info'])
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(tile_router, 'TILES_DIR', directory):
+                for path in tile_router.required_tile_paths().values():
+                    with open(path, 'w') as tile:
+                        tile.write('graph')
+
+                response = self.client.get('/health')
+                self.assertEqual(response.status_code, 200)
+                health = response.get_json()
+                self.assertEqual(health['status'], 'ok')
+                self.assertTrue(health['routing_ready'])
+                self.assertTrue(health['tile_info']['tiles_available'])
+
+    def test_tiles_status_counts_only_nonempty_tile_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(tile_router, 'TILES_DIR', directory):
+                paths = tile_router.required_tile_paths()
+                for path in paths.values():
+                    with open(path, 'w') as tile:
+                        tile.write('graph')
+
+                response = self.client.get('/tiles/status')
+                self.assertEqual(response.status_code, 200)
+                status = response.get_json()
+                self.assertEqual(status['total_files'], 16)
+                self.assertTrue(status['routing_ready'])
+
+                empty_path = paths['tile_00_00']
+                with open(empty_path, 'w'):
+                    pass
+                response = self.client.get('/tiles/status')
+                status = response.get_json()
+                self.assertEqual(status['total_files'], 15)
+                self.assertFalse(status['routing_ready'])
+                self.assertFalse(status['tile_files']['tile_00_00']['exists'])
 
 
 if __name__ == '__main__':
