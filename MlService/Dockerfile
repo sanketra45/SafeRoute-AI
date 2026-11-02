@@ -6,6 +6,7 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    SAFEROUTE_TILES_DIR=/app/data/tiles \
     OMP_NUM_THREADS=1 \
     OPENBLAS_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
@@ -25,8 +26,8 @@ RUN python -c 'import os, tile_router; expected="/app/data/tiles"; print("GraphM
 RUN python -u build_tiles_from_graphml.py --overwrite
 
 # Validate GraphML semantics in the final image layer, not just file count.
-RUN python -c 'from tile_router import tile_validation_status; s=tile_validation_status(); print("Validated %s/16 routing tiles, %s nodes, %s edges" % (s["valid_tiles"], sum(t["nodes"] for t in s["tiles"].values()), sum(t["edges"] for t in s["tiles"].values()))); assert s["routing_ready"], s["tiles"]'
+RUN python -c 'from tile_router import tile_validation_status; from build_tiles_from_graphml import _manifest_matches_source; s=tile_validation_status(); print("Validated %s/16 routing tiles, %s nodes, %s edges" % (s["valid_tiles"], sum(t["nodes"] for t in s["tiles"].values()), sum(t["edges"] for t in s["tiles"].values()))); assert s["routing_ready"], s["tiles"]; assert _manifest_matches_source(), "tile manifest does not match source GraphML and generated tiles"'
 
 # Also catch a Render disk mount hiding or replacing image tiles.
-CMD python -c 'from tile_router import tile_validation_status; s=tile_validation_status(); print("Startup tile validation: %s/16 valid" % s["valid_tiles"]); assert s["routing_ready"], s["tiles"]' && \
+CMD python -c 'import os, tile_router; from build_tiles_from_graphml import _manifest_matches_source; s=tile_router.tile_validation_status(); print("Startup tile validation: %s/16 valid" % s["valid_tiles"]); assert os.path.realpath(tile_router.TILES_DIR) == "/app/data/tiles"; assert s["routing_ready"], s["tiles"]; assert _manifest_matches_source(), "tile manifest does not match source GraphML and generated tiles"' && \
     exec gunicorn --bind 0.0.0.0:${PORT:-5001} --workers 1 --threads 2 --timeout 120 ml_service:app

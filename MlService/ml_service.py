@@ -85,8 +85,6 @@ def load_model():
         log.error("[FAIL] Model load failed: %s", e)
         log.error("       Run: python ml_model.py  to generate model.pkl")
 
-load_model()
-
 # ─────────────────────────────────────────────────────────
 # TILE-BASED ROUTING SETUP
 # ─────────────────────────────────────────────────────────
@@ -106,11 +104,20 @@ try:
         log.info("[ROUTER] Validated %d/%d routing tiles.",
                  _validation["valid_tiles"], GRID_ROWS * GRID_COLS)
     else:
-        log.warning("[ROUTER] Only %d/%d routing tiles are usable in %s.",
+        log.warning("[ROUTER] Only %d/%d routing tiles are usable in %s; "
+                    "repairing from the committed GraphML before serving requests.",
                     _validation["valid_tiles"], GRID_ROWS * GRID_COLS, TILES_DIR)
 except Exception as _tile_err:
     TILE_ROUTER_AVAILABLE = False
     log.error("[ROUTER] tile_router import failed: %s", _tile_err)
+
+if TILE_ROUTER_AVAILABLE:
+    from build_tiles_from_graphml import ensure_tiles_ready
+    _validation = ensure_tiles_ready()
+
+# Generate missing/invalid tiles before loading the model to limit startup peak
+# memory on native Render deployments. Docker builds already generate them.
+load_model()
 
 ROUTE_COMPUTE_LOCK = threading.BoundedSemaphore(1)
 
