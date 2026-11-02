@@ -250,6 +250,7 @@ export default function MapPage() {
   const [showHazardModal, setShowHazardModal] = useState(false)
   const [riskFilter, setRiskFilter] = useState('ALL')
   const [loading, setLoading] = useState(true)
+  const [blackspotsError, setBlackspotsError] = useState(null)
   const [activeLayer, setActiveLayer] = useState('street')
   const [showLayerPicker, setShowLayerPicker] = useState(false)
   const [userPos, setUserPos] = useState(null)
@@ -261,9 +262,10 @@ export default function MapPage() {
 
   const loadBlackspots = useCallback(() => {
     setLoading(true)
+    setBlackspotsError(null)
     getBlackspots()
       .then(data => { setBlackspots(Array.isArray(data) ? data : []); setLoading(false) })
-      .catch(() => { setBlackspots([]); setLoading(false) })
+      .catch(error => { setBlackspotsError(error.message || 'Unable to load blackspots'); setLoading(false) })
   }, [])
 
   useEffect(() => { loadBlackspots() }, [loadBlackspots])
@@ -279,7 +281,7 @@ export default function MapPage() {
     : blackspots.filter(b => b.risk === riskFilter)
 
   const statsData = [
-    { label: 'Total Blackspots', value: blackspots.length, color: 'var(--red)' },
+    { label: 'Total Blackspots', value: blackspotsError ? '—' : blackspots.length, color: 'var(--red)' },
     { label: 'High Risk', value: blackspots.filter(b => b.risk === 'HIGH').length, color: 'var(--orange)' },
     { label: 'Medium Risk', value: blackspots.filter(b => b.risk === 'MEDIUM').length, color: 'var(--yellow)' },
     { label: 'User Reports', value: userHazards.length, color: '#4db8ff' },
@@ -304,7 +306,13 @@ export default function MapPage() {
       <div className="section-header" style={{ marginBottom: 14 }}>
         <div>
           <div className="section-title">Nagpur Accident Map</div>
-          <div className="section-sub">Live blackspot grid from accident dataset — {blackspots.length} locations loaded</div>
+          <div className="section-sub">
+            {loading
+              ? 'Loading blackspot data…'
+              : blackspotsError
+                ? `Blackspot data unavailable: ${blackspotsError}`
+                : `Live blackspot grid from accident dataset — ${blackspots.length} locations loaded`}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-outline" style={{ fontSize: 11, padding: '7px 12px' }} onClick={loadBlackspots}>
@@ -380,7 +388,11 @@ export default function MapPage() {
               }}
             >
               {showBlackspots ? <Eye size={12} /> : <EyeOff size={12} />}
-              Blackspots ({filteredBlackspots.length})
+              {loading
+                ? 'Blackspots (loading…)'
+                : blackspotsError
+                  ? 'Blackspots unavailable'
+                  : `Blackspots (${filteredBlackspots.length})`}
             </button>
           </div>
 
@@ -407,6 +419,12 @@ export default function MapPage() {
                 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 24px', fontSize: 13, color: 'var(--accent)' }}>
                   Loading blackspot data…
                 </div>
+              </div>
+            )}
+
+            {blackspotsError && !loading && (
+              <div role="alert" style={{ position: 'absolute', top: 12, left: 12, zIndex: 900, background: 'rgba(127,29,29,0.95)', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#fff' }}>
+                Blackspots could not be loaded. Refresh to retry.
               </div>
             )}
 

@@ -1,3 +1,5 @@
+import { parseBlackspotsResponse } from './blackspots.js'
+
 /**
  * SafeRoute AI — API Service
  * /api/* → Spring Boot (port 8080) via Vite proxy in development
@@ -179,7 +181,8 @@ export async function reportHazard({ latitude, longitude, hazardType, severity, 
 
 export async function getBlackspots(riskFilter = null) {
   const params = riskFilter ? `?risk=${riskFilter}` : ''
-  return request(mlApiUrl(`/blackspots${params}`))
+  const payload = await request(mlApiUrl(`/blackspots${params}`))
+  return parseBlackspotsResponse(payload)
 }
 
 // ─── Admin Stats (Spring Boot /api/admin) ────────────────────
