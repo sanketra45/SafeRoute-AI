@@ -41,11 +41,17 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
-allowed_origins = os.getenv(
-    "CORS_ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:8080,http://localhost:3000",
-)
-CORS(app, origins=[origin.strip() for origin in allowed_origins.split(",") if origin.strip()])
+
+# CORS: allow any origin by default so the Vercel frontend can reach the
+# Render-deployed service without additional configuration. Restrict in
+# production by setting CORS_ALLOWED_ORIGINS="https://your-app.vercel.app".
+allowed_origins_raw = os.getenv("CORS_ALLOWED_ORIGINS", "*")
+if allowed_origins_raw.strip() == "*":
+    CORS(app, resources={r"/*": {"origins": "*"}})
+else:
+    _origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
+    CORS(app, origins=_origins)
+log.info("[CORS] Allowed origins: %s", allowed_origins_raw)
 
 BASE = pathlib.Path(__file__).parent
 
@@ -163,37 +169,123 @@ def _safe_encode(encoder, value, fallback, field_name):
         return int(encoder.transform([fallback])[0])
 
 # ─────────────────────────────────────────────────────────
-# GET /health
+
+# GET /  — root probe so Render default URL returns 200 not 404
+
 # ─────────────────────────────────────────────────────────
-@app.route("/health", methods=["GET"])
-def health():
-    tile_info = {}
-    if TILE_ROUTER_AVAILABLE:
-        try:
-            cache = get_tile_cache()
-            tile_info = {
-                "tiles_available": tiles_available(),
-                "tiles_dir": TILES_DIR,
-                "grid": f"{GRID_ROWS}x{GRID_COLS}",
-                "cached_tiles": len(cache.cache_info()),
-                "cached_tile_ids": list(cache.cache_info().keys()),
-            }
-        except Exception as e:
-            tile_info = {"error": str(e)}
+
+@app.route("/", methods=["GET"])
+
+def root():
+
+    _tiles_ready = TILE_ROUTER_AVAILABLE and tiles_available()
+    _routing_ready = MODEL_LOADED and _tiles_ready
 
     return jsonify({
-        "status":             "ok",
-        "model_loaded":       MODEL_LOADED,
-        "model_accuracy":     MODEL_META.get("accuracy", 0),
-        "tile_router":        TILE_ROUTER_AVAILABLE,
-        "tile_info":          tile_info,
-        "encoder_classes": {
-            "weather":  list(le_weather.classes_) if MODEL_LOADED else [],
-            "road":     list(le_road.classes_)    if MODEL_LOADED else [],
-            "density":  list(le_density.classes_) if MODEL_LOADED else [],
-            "risk":     list(le_risk.classes_)    if MODEL_LOADED else [],
-        }
+
+        "service":       "SafeRoute AI ML Microservice",
+
+        "status":        "ok",
+
+        "model_loaded":  MODEL_LOADED,
+
+        "routing_ready": _routing_ready,
+
+        "endpoints":     ["/health", "/tiles/status", "/predict-risk", "/safe-route", "/geocode", "/blackspots"],
+
     })
+
+
+
+
+
+# ─────────────────────────────────────────────────────────
+
+# GET /health
+
+# ─────────────────────────────────────────────────────────
+
+@app.route("/health", methods=["GET"])
+
+def health():
+
+    _tiles_ready = False
+
+    tile_info = {}
+
+    if TILE_ROUTER_AVAILABLE:
+
+        try:
+
+            _tiles_ready = tiles_available()
+
+            cache = get_tile_cache()
+
+            cache_detail = cache.cache_info()
+
+            tile_info = {
+
+                "tiles_available": _tiles_ready,
+
+                "tiles_dir": TILES_DIR,
+
+                "grid": f"{GRID_ROWS}x{GRID_COLS}",
+
+                "cached_tiles": len(cache_detail),
+
+                "cached_tile_ids": list(cache_detail.keys()),
+
+            }
+
+            if not _tiles_ready:
+
+                tile_info["hint"] = (
+
+                    "The full Nagpur tile grid is incomplete. Run python build_tiles_from_graphml.py "
+
+                    "to generate it from the committed GraphML."
+
+                )
+
+        except Exception as e:
+
+            tile_info = {"error": str(e)}
+
+
+
+    routing_ready = MODEL_LOADED and _tiles_ready
+
+
+
+    return jsonify({
+
+        "status":          "ok",
+
+        "model_loaded":    MODEL_LOADED,
+
+        "routing_ready":   routing_ready,
+
+        "model_accuracy":  MODEL_META.get("accuracy", 0),
+
+        "tile_router":     TILE_ROUTER_AVAILABLE,
+
+        "tile_info":       tile_info,
+
+        "encoder_classes": {
+
+            "weather":  list(le_weather.classes_) if MODEL_LOADED else [],
+
+            "road":     list(le_road.classes_)    if MODEL_LOADED else [],
+
+            "density":  list(le_density.classes_) if MODEL_LOADED else [],
+
+            "risk":     list(le_risk.classes_)    if MODEL_LOADED else [],
+
+        },
+
+    })
+
+
 
 # ─────────────────────────────────────────────────────────
 # POST /predict
@@ -548,7 +640,7 @@ def tiles_status():
         import os as _os
         from tile_router import (
             TILES_DIR as _td, GRID_ROWS as _gr, GRID_COLS as _gc,
-            get_tile_id, tile_graphml_path
+            get_tile_id, tile_graphml_path, missing_tile_ids
         )
         cache = get_tile_cache()
         cached = cache.cache_info()
@@ -572,6 +664,8 @@ def tiles_status():
             "tiles_dir":     _td,
             "grid":          f"{_gr}x{_gc}",
             "total_files":   sum(1 for v in tile_files.values() if v["exists"]),
+            "routing_ready": not missing_tile_ids(),
+            "missing_tiles": missing_tile_ids(),
             "total_mb":      round(total_mb, 1),
             "cached_tiles":  len(cached),
             "cached_detail": cached,

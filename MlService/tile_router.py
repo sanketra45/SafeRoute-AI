@@ -252,15 +252,28 @@ def tile_graphml_path(row: int, col: int) -> str:
     return os.path.join(TILES_DIR, f"{get_tile_id(row, col)}.graphml")
 
 
+def required_tile_paths() -> Dict[str, str]:
+    """Return the expected full-Nagpur tile set keyed by tile id."""
+    return {
+        get_tile_id(row, col): tile_graphml_path(row, col)
+        for row in range(GRID_ROWS)
+        for col in range(GRID_COLS)
+    }
+
+
+def missing_tile_ids() -> List[str]:
+    """Return every required tile that is absent from the deployment."""
+    return [tile_id for tile_id, path in required_tile_paths().items()
+            if not os.path.isfile(path)]
+
+
 def tiles_available() -> bool:
-    """Check if at least some tile files exist."""
-    if not os.path.isdir(TILES_DIR):
-        return False
-    for row in range(GRID_ROWS):
-        for col in range(GRID_COLS):
-            if os.path.exists(tile_graphml_path(row, col)):
-                return True
-    return False
+    """Whether the complete full-Nagpur tile grid is ready for routing.
+
+    A partial grid must not be reported as ready: routes crossing a missing
+    tile would otherwise fail after health had claimed routing was available.
+    """
+    return os.path.isdir(TILES_DIR) and not missing_tile_ids()
 
 
 # ── LRU Tile Cache ───────────────────────────────────────────────
