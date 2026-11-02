@@ -34,3 +34,21 @@
 
 
 NOTE : Please prefer IntelliJ IDEA for the project.
+
+
+-------------FOR RENDER ML SERVICE-------------------------------
+
+The ML service must build its tile files from `MlService/data/nagpur_road_network.graphml`.
+Configure the Render web service to use Docker with `MlService` as its root/build
+context and `./Dockerfile` as its Dockerfile. Do not override the Docker start
+command or mount a persistent disk at `/app/data/tiles`; the Docker build
+generates and validates all 16 tiles there, and startup fails if that directory
+is missing or unusable. A native Python Render service does not run this
+Dockerfile and can therefore serve the stale, header-only tile files tracked in
+`MlService/data/tiles`. If retaining a native service, set its root directory
+to `MlService`, Build Command to
+`pip install -r requirements.txt && python -u build_tiles_from_graphml.py --overwrite`,
+and Start Command to
+`gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 ml_service:app`.
+Do not mount a disk over `data/tiles`; startup validates generated tiles but
+does not overwrite them.
