@@ -37,7 +37,8 @@ log = logging.getLogger(__name__)
 
 # ── Paths ────────────────────────────────────────────────────────
 BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
-TILES_DIR     = os.path.join(BASE_DIR, "data", "tiles")
+TILES_DIR     = os.path.abspath(os.getenv(
+    "SAFEROUTE_TILES_DIR", os.path.join(BASE_DIR, "data", "tiles")))
 DATASET_PATH  = os.path.join(BASE_DIR, "nagpur_accident_dataset.csv")
 
 # ── Nagpur Bounding Box ──────────────────────────────────────────

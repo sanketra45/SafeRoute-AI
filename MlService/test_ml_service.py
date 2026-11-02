@@ -22,6 +22,12 @@ class MlServiceEndpointTests(unittest.TestCase):
         self.client = ml_service.app.test_client()
         ml_service._blackspots_cache = None
 
+    def test_service_startup_bootstraps_complete_tile_grid(self):
+        status = tile_router.tile_validation_status()
+        self.assertTrue(status['routing_ready'], status['tiles'])
+        self.assertEqual(status['valid_tiles'], 16)
+        self.assertEqual(status['invalid_tiles'], 0)
+
     def test_blackspots_uses_the_committed_dataset(self):
         response = self.client.get('/blackspots')
         self.assertEqual(response.status_code, 200)

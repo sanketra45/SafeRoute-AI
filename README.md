@@ -51,4 +51,11 @@ to `MlService`, Build Command to
 and Start Command to
 `gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 ml_service:app`.
 Do not mount a disk over `data/tiles`; startup validates generated tiles but
-does not overwrite them.
+does not overwrite a valid tile grid. For the native service, the app now
+detects missing, empty, corrupt, or incomplete tiles during import, regenerates
+the entire grid from the source GraphML under an inter-process lock, and only
+then loads the model and accepts requests. The explicit Build Command is still
+recommended so generation happens before service startup; the bootstrap is a
+recovery path for stale checked-in tile artifacts. A generated manifest records
+the source hash, grid definition, and each tile hash/count; stale but parseable
+tiles are rebuilt as well.
