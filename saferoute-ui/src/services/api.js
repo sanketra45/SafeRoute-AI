@@ -149,7 +149,17 @@ export async function geocode(query, limit = 8) {
 // ─── ML Health Check ────────────────────────────────────────
 
 export async function mlHealth() {
-  return request(mlApiUrl('/health'))
+  const health = await request(mlApiUrl('/health'))
+  if (health?.status !== 'ok') {
+    throw new Error('ML service did not report a healthy status')
+  }
+  return {
+    ...health,
+    serviceReachable: true,
+    // The Flask process can be alive while the graph is missing. Keep those
+    // states distinct so the navigator does not advertise an unusable A* router.
+    routingReady: health.routing_ready === true,
+  }
 }
 
 // ─── Hazards (Spring Boot /api/hazards) ─────────────────────

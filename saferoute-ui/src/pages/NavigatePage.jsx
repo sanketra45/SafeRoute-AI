@@ -321,7 +321,7 @@ export default function NavigatePage() {
   const [navigating, setNavigating] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [mlOnline, setMlOnline] = useState(null)
+  const [mlStatus, setMlStatus] = useState(null)
   const [isFallback, setIsFallback] = useState(false)
 
   const [safeRoute, setSafeRoute] = useState(null)
@@ -345,8 +345,8 @@ export default function NavigatePage() {
       .then(data => setHotspots(Array.isArray(data) ? data : []))
       .catch(() => setHotspots([]))
     mlHealth()
-      .then(() => setMlOnline(true))
-      .catch(() => setMlOnline(false))
+      .then(setMlStatus)
+      .catch(() => setMlStatus({ serviceReachable: false, routingReady: false }))
     getBlackspots()
       .then(data => setBlackspots(Array.isArray(data) ? data : []))
       .catch(() => setBlackspots([]))
@@ -559,9 +559,15 @@ export default function NavigatePage() {
           >
             ● Blackspots ({blackspots.length})
           </button>
-          <div className="pulse-dot" style={{ background: mlOnline === false ? '#ff9500' : '#00e5a0' }} />
-          <span style={{ fontSize: 11, color: mlOnline === false ? '#ff9500' : 'var(--accent)' }}>
-            {mlOnline === null ? 'Connecting…' : mlOnline ? 'ML A* Router Online' : 'ML Offline — OSRM Fallback'}
+          <div className="pulse-dot" style={{ background: mlStatus?.routingReady ? '#00e5a0' : '#ff9500' }} />
+          <span style={{ fontSize: 11, color: mlStatus?.routingReady ? 'var(--accent)' : '#ff9500' }}>
+            {mlStatus === null
+              ? 'Checking ML service…'
+              : mlStatus.routingReady
+                ? 'ML A* Router Online'
+                : mlStatus.serviceReachable
+                  ? 'ML Online — routing tiles unavailable; OSRM fallback'
+                  : 'ML Offline — OSRM Fallback'}
           </span>
         </div>
       </div>
@@ -610,7 +616,7 @@ export default function NavigatePage() {
         </div>
       )}
 
-      {mlOnline === false && (
+      {mlStatus !== null && !mlStatus.routingReady && (
         <div style={{
           background: 'rgba(255,149,0,0.07)', border: '1px solid rgba(255,149,0,0.3)',
           borderRadius: 10, padding: '10px 16px', marginBottom: 14,
