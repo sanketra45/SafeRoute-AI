@@ -97,17 +97,22 @@ load_model()
 try:
     from tile_router import (
         compare_routes_tile, get_tile_cache,
-        tiles_available, TILES_DIR, GRID_ROWS, GRID_COLS
+        tiles_available, tile_validation_status, TILES_DIR, GRID_ROWS, GRID_COLS
     )
     TILE_ROUTER_AVAILABLE = True
     log.info("[ROUTER] Tile-based router loaded. Tiles dir: %s", TILES_DIR)
-    if tiles_available():
-        log.info("[ROUTER] Tile files found — lazy loading enabled.")
+    _validation = tile_validation_status()
+    if _validation["routing_ready"]:
+        log.info("[ROUTER] Validated %d/%d routing tiles.",
+                 _validation["valid_tiles"], GRID_ROWS * GRID_COLS)
     else:
-        log.warning("[ROUTER] No tile files found in %s. Run: python generate_tiles.py", TILES_DIR)
+        log.warning("[ROUTER] Only %d/%d routing tiles are usable in %s.",
+                    _validation["valid_tiles"], GRID_ROWS * GRID_COLS, TILES_DIR)
 except Exception as _tile_err:
     TILE_ROUTER_AVAILABLE = False
     log.error("[ROUTER] tile_router import failed: %s", _tile_err)
+
+ROUTE_COMPUTE_LOCK = threading.BoundedSemaphore(1)
 
 # Legacy single-graph fallback (kept for reference / local dev)
 _legacy_graph = None
@@ -217,7 +222,8 @@ def health():
 
         try:
 
-            _tiles_ready = tiles_available()
+            validation = tile_validation_status()
+            _tiles_ready = validation["routing_ready"]
 
             cache = get_tile_cache()
 
@@ -232,8 +238,13 @@ def health():
                 "grid": f"{GRID_ROWS}x{GRID_COLS}",
 
                 "cached_tiles": len(cache_detail),
-
                 "cached_tile_ids": list(cache_detail.keys()),
+                "valid_tiles": validation["valid_tiles"],
+                "invalid_tiles": validation["invalid_tiles"],
+                "unusable_tile_ids": [
+                    tile_id for tile_id, info in validation["tiles"].items()
+                    if not info["valid"]
+                ],
 
             }
 
@@ -431,36 +442,44 @@ def safe_route():
     except (KeyError, ValueError, TypeError):
         return jsonify({"error": "originLat, originLon, destLat, destLon are required numeric fields"}), 400
 
-    # ── Try tile-based routing first ────────────────────────
-    if TILE_ROUTER_AVAILABLE and tiles_available():
-        try:
-            result = compare_routes_tile(
-                origin_lat, origin_lon, dest_lat, dest_lon,
-                live_conditions={
+    if not ROUTE_COMPUTE_LOCK.acquire(blocking=False):
+        response = jsonify({"error": "Routing is busy; retry shortly."})
+        response.headers["Retry-After"] = "1"
+        return response, 503
+
+    try:
+        # ── Try tile-based routing first ────────────────────────
+        if TILE_ROUTER_AVAILABLE and tiles_available():
+            try:
+                result = compare_routes_tile(
+                    origin_lat, origin_lon, dest_lat, dest_lon,
+                    live_conditions={
+                        "traffic": data.get("traffic"),
+                        "weather": data.get("weather"),
+                    }
+                )
+            except Exception as e:
+                log.exception("Tile routing error")
+                return jsonify({"error": f"Tile routing failed: {e}"}), 500
+        else:
+            # ── Legacy single-graph fallback (also serialized) ──
+            G = _get_graph()
+            if G is None:
+                return jsonify({
+                    "error":        "Road network not available. Run generate_tiles.py to create tile files.",
+                    "tileRouter":   TILE_ROUTER_AVAILABLE,
+                }), 503
+            try:
+                from risk_router import compare_routes
+                result = compare_routes(G, origin_lat, origin_lon, dest_lat, dest_lon, {
                     "traffic": data.get("traffic"),
                     "weather": data.get("weather"),
-                }
-            )
-        except Exception as e:
-            log.exception("Tile routing error")
-            return jsonify({"error": f"Tile routing failed: {e}"}), 500
-    else:
-        # ── Legacy single-graph fallback ─────────────────────
-        G = _get_graph()
-        if G is None:
-            return jsonify({
-                "error":        "Road network not available. Run generate_tiles.py to create tile files.",
-                "tileRouter":   TILE_ROUTER_AVAILABLE,
-            }), 503
-        try:
-            from risk_router import compare_routes
-            result = compare_routes(G, origin_lat, origin_lon, dest_lat, dest_lon, {
-                "traffic": data.get("traffic"),
-                "weather": data.get("weather"),
-            })
-        except Exception as e:
-            log.exception("Legacy routing error")
-            return jsonify({"error": f"Routing failed: {e}"}), 500
+                })
+            except Exception as e:
+                log.exception("Legacy routing error")
+                return jsonify({"error": f"Routing failed: {e}"}), 500
+    finally:
+        ROUTE_COMPUTE_LOCK.release()
 
     safe   = result.get("safe_route", {})
     fast   = result.get("short_route", {})
@@ -640,7 +659,8 @@ def tiles_status():
         import os as _os
         from tile_router import (
             TILES_DIR as _td, GRID_ROWS as _gr, GRID_COLS as _gc,
-            get_tile_id, tile_graphml_path, missing_tile_ids
+            get_tile_id, tile_graphml_path, missing_tile_ids,
+            validate_tile_file, tile_validation_status
         )
         cache = get_tile_cache()
         cached = cache.cache_info()
@@ -652,20 +672,28 @@ def tiles_status():
                 tid  = get_tile_id(r, c)
                 path = tile_graphml_path(r, c)
                 exists = _os.path.isfile(path) and _os.path.getsize(path) > 0
+                validation = validate_tile_file(path)
                 size_mb = _os.path.getsize(path) / (1024 * 1024) if exists else 0.0
                 total_mb += size_mb
                 tile_files[tid] = {
                     "exists":    exists,
+                    "valid":     validation["valid"],
+                    "nodes":     validation["nodes"],
+                    "edges":     validation["edges"],
+                    "error":     validation["error"],
                     "size_mb":   round(size_mb, 2),
                     "in_cache":  tid in cached,
                 }
 
+        validation_status = tile_validation_status()
         return jsonify({
             "tiles_dir":     _td,
             "grid":          f"{_gr}x{_gc}",
             "total_files":   sum(1 for v in tile_files.values() if v["exists"]),
             "routing_ready": not missing_tile_ids(),
             "missing_tiles": missing_tile_ids(),
+            "valid_tiles": validation_status["valid_tiles"],
+            "invalid_tiles": validation_status["invalid_tiles"],
             "total_mb":      round(total_mb, 1),
             "cached_tiles":  len(cached),
             "cached_detail": cached,

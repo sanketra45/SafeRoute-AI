@@ -5,7 +5,11 @@ FROM python:3.11-slim
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    OMP_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
@@ -17,10 +21,9 @@ COPY . ./
 # generator logs every tile and exits non-zero unless all 16 valid files exist.
 RUN python -u build_tiles_from_graphml.py --overwrite
 
-# Validate the generated files in the final image layer.
-RUN test "$(find data/tiles -name 'tile_*.graphml' -type f -size +0c | wc -l | tr -d '[:space:]')" -eq 16
+# Validate GraphML semantics in the final image layer, not just file count.
+RUN python -c 'from tile_router import tile_validation_status; s=tile_validation_status(); print("Validated %s/16 routing tiles" % s["valid_tiles"]); assert s["routing_ready"], s["tiles"]'
 
-# Also catch an empty Render disk mount hiding the image's generated tiles.
-CMD count=$(find data/tiles -name 'tile_*.graphml' -type f -size +0c | wc -l | tr -d '[:space:]'); \
-    if [ "$count" -ne 16 ]; then echo "Expected 16 nonempty routing tiles, found $count" >&2; exit 1; fi; \
-    exec gunicorn --bind 0.0.0.0:${PORT:-5001} --workers 1 --threads 4 --timeout 120 ml_service:app
+# Also catch a Render disk mount hiding or replacing image tiles.
+CMD python -c 'from tile_router import tile_validation_status; s=tile_validation_status(); print("Startup tile validation: %s/16 valid" % s["valid_tiles"]); assert s["routing_ready"], s["tiles"]' && \
+    exec gunicorn --bind 0.0.0.0:${PORT:-5001} --workers 1 --threads 2 --timeout 120 ml_service:app
