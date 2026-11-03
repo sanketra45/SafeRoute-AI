@@ -140,7 +140,7 @@ export default function RegisterPage({ onRegister, onLogin }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="register-password-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="input-group">
                 <label className="input-label">Password</label>
                 <div className="input-icon-wrap">

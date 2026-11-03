@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { MapContainer, Marker, Popup, useMap, useMapEvents, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { AlertTriangle, Locate, Layers, Plus, RefreshCw, Eye, EyeOff, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { AlertTriangle, Locate, Layers, Plus, RefreshCw, Eye, EyeOff, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Navigation } from 'lucide-react'
 import ReportHazardModal from '../components/ReportHazardModal'
 import { getBlackspots, getHotspots } from '../services/api'
 
@@ -242,7 +242,7 @@ function DPad({ onPan }) {
 }
 
 // ── Main Page ────────────────────────────────────────────────
-export default function MapPage() {
+export default function MapPage({ onNavigate }) {
   const [blackspots, setBlackspots] = useState([])
   const [userHazards, setUserHazards] = useState([])
   const [showBlackspots, setShowBlackspots] = useState(true)
@@ -314,12 +314,27 @@ export default function MapPage() {
                 : `Live blackspot grid from accident dataset — ${blackspots.length} locations loaded`}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-outline" style={{ fontSize: 11, padding: '7px 12px' }} onClick={loadBlackspots}>
+        <div className="map-header-actions" style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-outline map-refresh-desktop" style={{ fontSize: 11, padding: '7px 12px' }} onClick={loadBlackspots}>
             <RefreshCw size={12} /> Refresh
           </button>
           <button
-            className="btn btn-primary"
+            className="btn btn-primary map-navigate-mobile"
+            style={{ fontSize: 11, padding: '7px 14px' }}
+            onClick={onNavigate}
+          >
+            <Navigation size={12} /> Navigate
+          </button>
+          <button
+            className="icon-btn map-refresh-mobile"
+            onClick={loadBlackspots}
+            title="Refresh blackspot data"
+            aria-label="Refresh blackspot data"
+          >
+            <RefreshCw size={14} />
+          </button>
+          <button
+            className="btn btn-primary map-report-button"
             style={{ fontSize: 11, padding: '7px 14px' }}
             onClick={() => setShowHazardModal(true)}
           >
@@ -397,7 +412,7 @@ export default function MapPage() {
           </div>
 
           {/* Risk filter pills */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <div className="map-risk-filters" style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
             {[['ALL', 'All Zones', '#888'], ['HIGH', '⚠ High Risk', '#ef4444'], ['MEDIUM', '~ Medium', '#f59e0b'], ['LOW', '✓ Low Risk', '#10b981']].map(([val, label, col]) => (
               <button key={val} onClick={() => setRiskFilter(val)} style={{
                 padding: '4px 12px', borderRadius: 20, fontSize: 11, cursor: 'pointer',

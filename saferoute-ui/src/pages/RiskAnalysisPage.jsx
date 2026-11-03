@@ -88,7 +88,7 @@ export default function RiskAnalysisPage() {
   return (
     <div className="page">
       {/* Header */}
-      <div className="section-header" style={{ marginBottom: 20 }}>
+      <div className="section-header risk-header" style={{ marginBottom: 20 }}>
         <div>
           <div className="section-title">Risk Analysis Dashboard</div>
           <div className="section-sub">Nagpur accident blackspot analytics — {totalAcc.toLocaleString()} total accidents across {total} zones</div>
@@ -125,7 +125,7 @@ export default function RiskAnalysisPage() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid-2" style={{ marginBottom: 20, gap: 20 }}>
+      <div className="grid-2 risk-chart-grid" style={{ marginBottom: 20, gap: 20 }}>
 
         {/* Bar chart — top 10 accident locations */}
         <div className="chart-area">
@@ -155,7 +155,7 @@ export default function RiskAnalysisPage() {
         {/* Risk Distribution Donut + Road Types */}
         <div className="chart-area">
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Risk Distribution</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div className="risk-distribution" style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <div style={{ position: 'relative', width: 160, height: 160, flexShrink: 0 }}>
               <ResponsiveContainer width={160} height={160}>
                 <PieChart>
@@ -196,12 +196,12 @@ export default function RiskAnalysisPage() {
       {/* Blackspot Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         {/* Table Toolbar */}
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="risk-table-toolbar" style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700 }}>
             All Accident Blackspots ({filtered.length})
           </div>
           {/* Search */}
-          <div style={{ position: 'relative', marginLeft: 'auto' }}>
+          <div className="risk-search" style={{ position: 'relative', marginLeft: 'auto' }}>
             <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               value={search}
@@ -212,7 +212,7 @@ export default function RiskAnalysisPage() {
             />
           </div>
           {/* Risk filter */}
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div className="risk-filters" style={{ display: 'flex', gap: 4 }}>
             {['all', 'HIGH', 'MEDIUM', 'LOW'].map(r => (
               <button key={r} onClick={() => setRiskFilter(r)} style={{
                 padding: '5px 10px', borderRadius: 6, fontSize: 11, cursor: 'pointer',
@@ -246,7 +246,7 @@ export default function RiskAnalysisPage() {
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Try adjusting the filter or search term</div>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto', maxHeight: 480, overflowY: 'auto' }}>
+          <div className="data-table-wrapper" style={{ maxHeight: 480, overflowY: 'auto' }}>
             <table className="data-table" style={{ minWidth: 700 }}>
               <thead>
                 <tr>

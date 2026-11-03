@@ -206,13 +206,13 @@ export default function ReportHazardModal({ onClose, onSubmit, onSelectOnMap, on
   if (pickerOpen) return null
 
   return (
-    <div style={{
+    <div className="responsive-modal-overlay" style={{
       position:'fixed', inset:0, zIndex:9998,
       background:'rgba(0,0,0,0.72)', backdropFilter:'blur(6px)',
       display:'flex', alignItems: selectingOnMap ? 'flex-end' : 'center', justifyContent:'center',
       padding:20, animation:'fadeIn 0.2s ease', pointerEvents:'none',
     }}>
-      <div style={{
+      <div className="responsive-modal-panel" style={{
         background:'var(--bg-card)', border:'1px solid var(--border)',
         borderRadius:16, padding:28, width:'100%', maxWidth:500,
         boxShadow:'0 20px 60px rgba(0,0,0,0.55)',
