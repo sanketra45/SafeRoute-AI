@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   Shield, Map, Navigation, BarChart2, Settings,
   Sun, Moon, Bell, Monitor, AlertTriangle, Route,
-  LogOut, Menu, X, ChevronRight, Activity, MapPin
+  LogOut, MoreVertical, ChevronRight, Activity
 } from 'lucide-react'
 import ReportHazardModal from './ReportHazardModal'
 
@@ -15,17 +16,59 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
   const { user } = useAuth()
   const [theme, setTheme] = useState(getTheme)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [alerts, setAlerts] = useState(0)
   const [alertsOpen, setAlertsOpen] = useState(false)
   const [showHazardModal, setShowHazardModal] = useState(false)
   const [sidebarActive, setSidebarActive] = useState('route')
+  const mobileMenuRef = useRef(null)
+  const mobileMenuButtonRef = useRef(null)
 
   // Apply theme to root element
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('saferoute_theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined
+
+    const menuItems = () => [...(mobileMenuRef.current?.querySelectorAll('[role="menuitem"]') || [])]
+    menuItems()[0]?.focus()
+
+    const handlePointerDown = (event) => {
+      if (!mobileMenuRef.current?.contains(event.target) && !mobileMenuButtonRef.current?.contains(event.target)) {
+        setMobileMenuOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event) => {
+      const items = menuItems()
+      const currentIndex = items.indexOf(document.activeElement)
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setMobileMenuOpen(false)
+        mobileMenuButtonRef.current?.focus()
+      } else if (items.length && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault()
+        const nextIndex = event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? items.length - 1
+            : currentIndex < 0
+              ? event.key === 'ArrowDown' ? 0 : items.length - 1
+              : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+        items[nextIndex]?.focus()
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [mobileMenuOpen])
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
 
@@ -45,9 +88,15 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
   ]
 
   const handleNav = (id) => {
+    if (mobileMenuOpen) mobileMenuButtonRef.current?.focus()
     setActivePage(id)
     setMobileMenuOpen(false)
-    setSidebarOpen(false)
+  }
+
+  const openHazardReport = () => {
+    if (mobileMenuOpen) mobileMenuButtonRef.current?.focus()
+    setMobileMenuOpen(false)
+    setShowHazardModal(true)
   }
 
   const initials = user?.name ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) : 'U'
@@ -56,9 +105,6 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
     <div className="app-layout">
       {/* NAVBAR */}
       <nav className="navbar">
-        <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
-          <Menu size={16} />
-        </button>
         <div className="navbar-logo" onClick={() => handleNav('map')}>
           <Shield size={18} />
           <span>SafeRoute AI</span>
@@ -79,14 +125,9 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
           ))}
         </div>
 
-        {/* Mobile hamburger for nav links */}
-        <button className="mobile-nav-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-          {mobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
-        </button>
-
         <div className="navbar-right">
           {/* Theme toggle */}
-          <button className="icon-btn" title="Toggle Theme" onClick={toggleTheme}>
+          <button className="icon-btn" type="button" aria-label="Toggle theme" title="Toggle Theme" onClick={toggleTheme}>
             {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
           </button>
 
@@ -95,6 +136,9 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
             <button
               className="icon-btn"
               title="Alerts"
+              type="button"
+              aria-label="Notifications"
+              aria-expanded={alertsOpen}
               onClick={() => { setAlertsOpen(!alertsOpen); if (alerts > 0) setAlerts(0) }}
               style={{ position: 'relative' }}
             >
@@ -133,40 +177,74 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
             )}
           </div>
 
+          <button
+            ref={mobileMenuButtonRef}
+            className="icon-btn mobile-overflow-btn"
+            type="button"
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-haspopup="menu"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-overflow-menu"
+            onClick={() => {
+              setAlertsOpen(false)
+              setMobileMenuOpen((open) => !open)
+            }}
+          >
+            <MoreVertical size={18} aria-hidden="true" />
+          </button>
+
           <div className="avatar" title={user?.name || 'User'}>
             {initials}
           </div>
 
-          <button className="icon-btn" title="Logout" onClick={onLogout}>
+          <button className="icon-btn desktop-logout" type="button" aria-label="Logout" title="Logout" onClick={onLogout}>
             <LogOut size={14} />
           </button>
         </div>
       </nav>
 
-      {/* MOBILE NAV DROPDOWN */}
-      {mobileMenuOpen && (
-        <div className="mobile-nav-menu">
-          {navLinks.map((link) => (
+      {createPortal(
+        <div
+          id="mobile-overflow-menu"
+          className="mobile-overflow-menu"
+          hidden={!mobileMenuOpen}
+          role="menu"
+          aria-label="Main navigation"
+          ref={mobileMenuRef}
+        >
+          {[
+            ...navLinks.map((link) => ({
+              id: link.id,
+              label: link.id === 'map' ? 'Home / Map' : link.id === 'admin' ? 'Admin Panel' : link.label,
+              icon: link.icon,
+              action: () => handleNav(link.id),
+              active: activePage === link.id,
+            })),
+            { id: 'report', label: 'Report Hazard', icon: <AlertTriangle size={17} />, action: openHazardReport },
+            { id: 'logout', label: 'Logout', icon: <LogOut size={17} />, action: onLogout, destructive: true },
+          ].map((item) => (
             <button
-              key={link.id}
-              className={`mobile-nav-link ${activePage === link.id ? 'active' : ''}`}
-              onClick={() => handleNav(link.id)}
+              key={item.id}
+              type="button"
+              role="menuitem"
+              tabIndex={0}
+              className={`mobile-overflow-item${item.active ? ' active' : ''}${item.destructive ? ' destructive' : ''}${item.id === 'report' || item.id === 'logout' ? ' separated' : ''}`}
+              aria-current={item.active ? 'page' : undefined}
+              onClick={item.action}
             >
-              {link.icon} {link.label}
+              {item.icon}
+              <span>{item.label}</span>
+              {item.active && <span className="mobile-overflow-current">Current</span>}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* BODY */}
       <div className="app-body">
-        {/* SIDEBAR OVERLAY (mobile) */}
-        {sidebarOpen && (
-          <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
-        )}
-
         {/* SIDEBAR */}
-        <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
+        <aside className="sidebar">
           <div style={{ padding: '0 0 12px' }}>
             <div className="sidebar-section-label">Map Controls</div>
             <div className="sidebar-sub">Nagpur Intelligent Grid</div>
@@ -176,7 +254,7 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
             <div
               key={item.id}
               className={`sidebar-item ${sidebarActive === item.id ? 'active' : ''}`}
-              onClick={() => { setSidebarActive(item.id); item.action(); setSidebarOpen(false) }}
+              onClick={() => { setSidebarActive(item.id); item.action() }}
             >
               {item.icon}
               <span>{item.label}</span>
@@ -184,7 +262,7 @@ export default function MainLayout({ children, activePage, setActivePage, onLogo
           ))}
 
           <div style={{ padding: '20px 16px 8px' }}>
-            <button className="sidebar-cta" onClick={() => { handleNav('navigate'); setSidebarOpen(false) }}>
+            <button className="sidebar-cta" onClick={() => handleNav('navigate')}>
               <Navigation size={15} />
               Find Safe Route
             </button>
