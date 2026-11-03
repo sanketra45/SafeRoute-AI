@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { MapContainer, Marker, Popup, useMap, useMapEvents, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { AlertTriangle, Locate, Layers, Plus, RefreshCw, Eye, EyeOff, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Navigation } from 'lucide-react'
+import { AlertTriangle, Locate, Layers, Plus, RefreshCw, Eye, EyeOff, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import ReportHazardModal from '../components/ReportHazardModal'
 import { getBlackspots, getHotspots } from '../services/api'
 
@@ -242,7 +242,7 @@ function DPad({ onPan }) {
 }
 
 // ── Main Page ────────────────────────────────────────────────
-export default function MapPage({ onNavigate }) {
+export default function MapPage() {
   const [blackspots, setBlackspots] = useState([])
   const [userHazards, setUserHazards] = useState([])
   const [showBlackspots, setShowBlackspots] = useState(true)
@@ -303,7 +303,7 @@ export default function MapPage({ onNavigate }) {
       `}</style>
 
       {/* Header */}
-      <div className="section-header" style={{ marginBottom: 14 }}>
+      <div className="section-header map-page-header" style={{ marginBottom: 14 }}>
         <div>
           <div className="section-title">Nagpur Accident Map</div>
           <div className="section-sub">
@@ -317,13 +317,6 @@ export default function MapPage({ onNavigate }) {
         <div className="map-header-actions" style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-outline map-refresh-desktop" style={{ fontSize: 11, padding: '7px 12px' }} onClick={loadBlackspots}>
             <RefreshCw size={12} /> Refresh
-          </button>
-          <button
-            className="btn btn-primary map-navigate-mobile"
-            style={{ fontSize: 11, padding: '7px 14px' }}
-            onClick={onNavigate}
-          >
-            <Navigation size={12} /> Navigate
           </button>
           <button
             className="icon-btn map-refresh-mobile"
