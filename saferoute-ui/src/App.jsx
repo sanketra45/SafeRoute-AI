@@ -29,7 +29,7 @@ function AppInner() {
   const safeActivePage = activePage === 'admin' && !isAdmin ? 'map' : activePage
 
   const pageMap = {
-    map: <MapPage />,
+    map: <MapPage onNavigate={() => setActivePage('navigate')} />,
     navigate: <NavigatePage />,
     risk: <RiskAnalysisPage />,
     admin: isAdmin ? <AdminPage /> : <MapPage />,

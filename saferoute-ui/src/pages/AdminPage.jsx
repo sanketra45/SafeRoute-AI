@@ -18,11 +18,11 @@ import { useAuth } from '../context/AuthContext'
 // ── Confirm Dialog ───────────────────────────────────────────
 function ConfirmDialog({ message, onConfirm, onCancel }) {
   return (
-    <div style={{
+    <div className="responsive-modal-overlay" style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div style={{
+      <div className="responsive-modal-panel" style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 14, padding: 28, maxWidth: 380, width: '90%',
       }}>
@@ -270,7 +270,7 @@ export default function AdminPage() {
       </div>
 
       {/* Tab Nav */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, padding: '3px', background: 'var(--bg-card)', borderRadius: 10, width: 'fit-content', border: '1px solid var(--border)' }}>
+      <div className="admin-tabs" style={{ display: 'flex', gap: 4, marginBottom: 20, padding: '3px', background: 'var(--bg-card)', borderRadius: 10, width: 'fit-content', border: '1px solid var(--border)' }}>
         {SECTIONS.map(s => (
           <button key={s} onClick={() => setActiveSection(s)} style={{
             fontSize: 12, padding: '6px 16px', borderRadius: 7, cursor: 'pointer',
@@ -371,7 +371,8 @@ export default function AdminPage() {
                 {users.length === 0 ? 'No users found. Ensure backend is running.' : 'No matching users.'}
               </div>
             ) : (
-              <table className="data-table">
+              <div className="data-table-wrapper">
+              <table className="data-table admin-data-table">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -439,6 +440,7 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
@@ -455,12 +457,12 @@ export default function AdminPage() {
 
           {/* Form Modal */}
           {bsForm !== null && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, width: 480, maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="responsive-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="responsive-modal-panel" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, width: 480, maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, marginBottom: 20 }}>
                   {bsForm.id ? 'Edit Blackspot' : 'Add New Blackspot'}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <Field label="Latitude *">
                     <input style={inputStyle} type="number" step="0.0001" value={bsFormData.latitude ?? ''} onChange={e => setBsFormData(p => ({ ...p, latitude: e.target.value }))} placeholder="e.g. 21.1458" />
                   </Field>
@@ -518,7 +520,8 @@ export default function AdminPage() {
             ) : blackspots.length === 0 ? (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No blackspots found.</div>
             ) : (
-              <table className="data-table">
+              <div className="data-table-wrapper">
+              <table className="data-table admin-data-table">
                 <thead>
                   <tr><th>Location</th><th>Lat/Lng</th><th>Severity</th><th>Accidents</th><th>Road Type</th><th>Actions</th></tr>
                 </thead>
@@ -552,6 +555,7 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
@@ -568,13 +572,13 @@ export default function AdminPage() {
 
           {/* Hazard Form Modal */}
           {hzForm !== null && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, width: 420, maxWidth: '94vw' }}>
+            <div className="responsive-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="responsive-modal-panel" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 28, width: 420, maxWidth: '94vw' }}>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, marginBottom: 20 }}>
                   {hzForm.id ? 'Edit Hazard' : 'Add New Hazard'}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div className="admin-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     <Field label="Latitude *">
                       <input style={inputStyle} type="number" step="0.0001" value={hzFormData.latitude ?? ''} onChange={e => setHzFormData(p => ({ ...p, latitude: e.target.value }))} />
                     </Field>
@@ -617,7 +621,8 @@ export default function AdminPage() {
             ) : hazards.length === 0 ? (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No hazards found.</div>
             ) : (
-              <table className="data-table">
+              <div className="data-table-wrapper">
+              <table className="data-table admin-data-table">
                 <thead>
                   <tr><th>Type</th><th>Location</th><th>Description</th><th>Status</th><th>Reported</th><th>Actions</th></tr>
                 </thead>
@@ -660,6 +665,7 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
